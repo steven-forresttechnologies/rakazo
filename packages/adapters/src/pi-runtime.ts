@@ -2010,7 +2010,13 @@ function builtinParameters(tool: ConnectorTool) {
       bot_id: Type.Optional(Type.String()),
     });
   }
-  if (tool.name === "list_fleet") return Type.Object({ bot_id: Type.Optional(Type.String()) });
+  if (tool.name === "list_fleet") {
+    return Type.Object({
+      bot_id: Type.Optional(Type.String()),
+      models: Type.Optional(Type.Boolean()),
+      query: Type.Optional(Type.String()),
+    });
+  }
   if (tool.name === "create_group") {
     return Type.Object({
       name: Type.String({ minLength: 1 }),
@@ -2155,9 +2161,16 @@ const FLEET_STRING_ARGS = [
   "section",
   "instructions",
   "expected_version",
+  "query",
 ] as const;
 const FLEET_LIST_ARGS = ["bot_ids", "bot_names", "add_bot_ids", "remove_bot_ids"] as const;
-const FLEET_FLAG_ARGS = ["pinned", "clear_section", "clear", "use_attached_image"] as const;
+const FLEET_FLAG_ARGS = [
+  "pinned",
+  "clear_section",
+  "clear",
+  "use_attached_image",
+  "models",
+] as const;
 
 /**
  * Keeps only the fleet and `update_bot` arguments a model sent, coerced to their declared types.

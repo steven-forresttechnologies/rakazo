@@ -1254,14 +1254,23 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "list_fleet",
     description:
-      "List the bots and groups of this user with their ids, sections and pinned state, and which bots you created. Pass bot_id of a bot you created to read only its full instructions and instructionsVersion, which set_child_instructions needs as expected_version. Call this before changing the bots you manage.",
+      "List the bots and groups of this user with their ids, sections and pinned state, and which bots you created. Pass bot_id of a bot you created to read only its full instructions, instructionsVersion (set_child_instructions needs it as expected_version) and model. Pass models: true to list only the models set_child_bot_model accepts. Call this before changing the bots you manage.",
     inputSchema: {
       type: "object",
       properties: {
         bot_id: {
           type: "string",
           description:
-            "A bot you created, to read its instructions and version instead of the roster.",
+            "A bot you created, to read its instructions, version and model instead of the roster.",
+        },
+        models: {
+          type: "boolean",
+          description: "List the models a bot can be set to instead of the roster.",
+        },
+        query: {
+          type: "string",
+          description:
+            "With models: true, only models whose name, id or provider match. Use it when the list is truncated.",
         },
       },
       additionalProperties: false,
@@ -1334,7 +1343,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "set_child_bot_model",
     description:
-      "Set the model of a bot you created, or reset it to the default with clear: true. Identify it by bot_id or bot_name (exact). Only bots you created. Needs the owner's approval.",
+      "Set the model of a bot you created, or reset it to the default with clear: true. Identify it by bot_id or bot_name (exact). Only bots you created. Pass provider and model exactly as list_fleet with models: true returns them. Needs the owner's approval.",
     inputSchema: {
       type: "object",
       properties: {

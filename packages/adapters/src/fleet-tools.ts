@@ -16,6 +16,7 @@ import {
 } from "@rakazo/contracts";
 import {
   CARD_TITLE_ESCAPED_CHARACTERS,
+  filterModelChoices,
   ONCE_ROUTINE_CRON,
   redactSecrets,
   toolRequiresExplicitApproval,
@@ -43,6 +44,8 @@ import {
   createScheduleFromTool,
   resolveScheduleTiming,
 } from "./schedule-tools.js";
+import type { SpaceModelCatalogDeps } from "./space-models.js";
+import { listSpaceModelChoices } from "./space-models.js";
 import type { UpdateBotPatch } from "./update-bot-patch.js";
 import { argumentGiven, parseUpdateBotPatch } from "./update-bot-patch.js";
 
@@ -456,7 +459,19 @@ export type FleetListing = {
   sections: string[];
   truncated: boolean;
   /** With `bot_id` of a bot the caller created: what an instruction edit must start from. */
-  bot?: { id: string; name: string; instructions: string; instructionsVersion: string };
+  bot?: {
+    id: string;
+    name: string;
+    instructions: string;
+    instructionsVersion: string;
+    /** Null runs on the space default. */
+    model: { provider: string; model: string; thinkingLevel: string | null } | null;
+  };
+};
+
+export type FleetModelListing = {
+  models: Array<{ provider: string; model: string; label: string }>;
+  truncated: boolean;
 };
 
 /** The version an instruction edit must echo back: the newest history entry, or "initial". */
@@ -485,6 +500,14 @@ export async function listFleet(
       name: singleLine(child.name),
       instructionsVersion: instructionsVersionOf(row),
       instructions: row.instructions,
+      model:
+        child.modelProvider && child.modelId
+          ? {
+              provider: child.modelProvider,
+              model: child.modelId,
+              thinkingLevel: child.thinkingLevel ?? null,
+            }
+          : null,
     };
   }
   if (detail) return { bot: detail, bots: [], groups: [], sections: [], truncated: false };
@@ -553,6 +576,34 @@ export async function listFleet(
       rows.splice(kept);
       listing.truncated = true;
     }
+  }
+  return listing;
+}
+
+/**
+ * The models set_child_bot_model accepts: the owner's bot settings picker, optionally
+ * narrowed by `query`.
+ */
+export async function listFleetModels(
+  deps: SpaceModelCatalogDeps,
+  run: FleetRun,
+  args: { query?: unknown },
+): Promise<FleetModelListing> {
+  const choices = filterModelChoices(
+    await listSpaceModelChoices(deps, run),
+    text(args.query) ?? "",
+  );
+  const listing: FleetModelListing = { models: [], truncated: false };
+  let remaining = FLEET_ROSTER_MAX_LENGTH - JSON.stringify(listing).length;
+  for (const choice of choices) {
+    const row = { provider: choice.provider, model: choice.modelId, label: choice.label };
+    const length = JSON.stringify(row).length + 1;
+    if (length > remaining) {
+      listing.truncated = true;
+      break;
+    }
+    remaining -= length;
+    listing.models.push(row);
   }
   return listing;
 }
