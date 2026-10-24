@@ -6,12 +6,15 @@ import {
   createChildRoutine,
   instructionsVersionOf,
   listFleet,
+  listFleetModels,
   organizeBot,
   prepareFleetRequest,
   setChildBotModel,
   setChildInstructions,
   updateChildBot,
 } from "./fleet-tools.js";
+import { ProviderCatalogCache } from "./pi-live-catalog.js";
+import { listPiCatalog } from "./pi-models.js";
 
 type FakeBot = {
   id: string;
@@ -880,7 +883,7 @@ describe("listFleet", () => {
       ],
     });
     expect(await listFleet(deps, run, { bot_id: "child" })).toEqual({
-      bot: { id: "child", name: "Child", instructionsVersion: "v2", instructions },
+      bot: { id: "child", name: "Child", instructionsVersion: "v2", instructions, model: null },
       bots: [],
       groups: [],
       sections: [],
@@ -968,6 +971,14 @@ describe("listFleet", () => {
           instructionHistory: [{ id: "version-2" }, { id: "version-1" }],
         },
         { id: "bot-fresh", name: "Fresh", parentBotId: "bot-self", instructions: "Start." },
+        {
+          id: "bot-tuned",
+          name: "Tuned",
+          parentBotId: "bot-self",
+          modelProvider: "anthropic",
+          modelId: "claude-old",
+          thinkingLevel: "high",
+        },
         { id: "bot-peer", name: "Peer", instructions: "Secret plan." },
       ],
     });
@@ -976,6 +987,12 @@ describe("listFleet", () => {
     });
     expect(await listFleet(deps, run, { bot_id: "bot-fresh" })).toMatchObject({
       bot: { id: "bot-fresh", instructions: "Start.", instructionsVersion: "initial" },
+    });
+    expect(await listFleet(deps, run, { bot_id: "bot-fresh" })).toMatchObject({
+      bot: { model: null },
+    });
+    expect(await listFleet(deps, run, { bot_id: "bot-tuned" })).toMatchObject({
+      bot: { model: { provider: "anthropic", model: "claude-old", thinkingLevel: "high" } },
     });
     expect(await listFleet(deps, run, { bot_id: "bot-peer" })).toEqual({
       error: "You can only change bots you created. The owner edits the others.",
@@ -1051,6 +1068,113 @@ describe("listFleet", () => {
     const listed = await listFleet(fakeFleet({ sections }).deps, run, {});
     expect(listed).toMatchObject({ truncated: true });
     expect("sections" in listed && listed.sections).toHaveLength(100);
+  });
+});
+
+describe("listFleetModels", () => {
+  function modelDeps() {
+    const connection = {
+      id: "credential-local",
+      provider: "openai-compatible",
+      label: "Local",
+      secretId: "secret-local",
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      preferences: [],
+    };
+    const prisma = {
+      userModelCredential: { findMany: vi.fn(async () => [connection]) },
+      spaceModelPreference: { findMany: vi.fn(async () => []) },
+      secret: {
+        findMany: vi.fn(async () => [{ id: "secret-local", ciphertext: "sealed" }]),
+      },
+    };
+    const plaintext = JSON.stringify({
+      kind: "openai_compatible",
+      baseUrl: "https://models.example.test/v1",
+      enabledModelIds: ["qwen-coder", "llama-large"],
+    });
+    return {
+      prisma: prisma as unknown as PrismaClient,
+      secretStore: { load: vi.fn(async () => plaintext) },
+      providerCatalog: new ProviderCatalogCache({ enabled: false }),
+      refreshExpiredCredential: vi.fn(),
+    };
+  }
+
+  it("lists the connected models as set_child_bot_model takes them", async () => {
+    expect(await listFleetModels(modelDeps(), run, {})).toEqual({
+      models: [
+        { provider: "openai-compatible", model: "qwen-coder", label: "Local · qwen-coder" },
+        { provider: "openai-compatible", model: "llama-large", label: "Local · llama-large" },
+      ],
+      truncated: false,
+    });
+  });
+
+  it("narrows the list by query on the model or the connection", async () => {
+    expect(await listFleetModels(modelDeps(), run, { query: "llama" })).toMatchObject({
+      models: [{ model: "llama-large" }],
+    });
+    expect(await listFleetModels(modelDeps(), run, { query: "local" })).toMatchObject({
+      models: [{ model: "qwen-coder" }, { model: "llama-large" }],
+    });
+  });
+
+  describe("with Rakazo credits", () => {
+    const hostedModel = () => listPiCatalog().find((entry) => entry.provider === "openrouter")!;
+
+    beforeEach(() => {
+      vi.stubEnv("PI_DEFAULT_PROVIDER", "openrouter");
+      vi.stubEnv("OPENROUTER_API_KEY", "fixture-deployment-key");
+    });
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    function withCredits<P extends object>(prisma: P) {
+      return Object.assign(prisma, {
+        space: {
+          findFirst: vi.fn(async () => ({
+            organization: { modelCredits: { mode: "credits" } },
+          })),
+        },
+      });
+    }
+
+    it("lists the models the credits pay for without a connection", async () => {
+      const prisma = withCredits({
+        userModelCredential: { findMany: vi.fn(async () => []) },
+        spaceModelPreference: { findMany: vi.fn(async () => []) },
+        secret: { findMany: vi.fn(async () => []) },
+      });
+      const listing = await listFleetModels(
+        {
+          prisma: prisma as unknown as PrismaClient,
+          secretStore: { load: vi.fn() },
+          hostedProvider: "openrouter",
+          providerCatalog: new ProviderCatalogCache({ enabled: false }),
+          refreshExpiredCredential: vi.fn(),
+        },
+        run,
+        { query: hostedModel().id },
+      );
+      expect(listing.models).toContainEqual(
+        expect.objectContaining({ provider: "openrouter", model: hostedModel().id }),
+      );
+    });
+
+    it("lets set_child_bot_model pick one", async () => {
+      const { deps, prisma } = fakeFleet(fleet);
+      withCredits(prisma);
+      const prepared = await prepareFleetRequest(
+        { ...deps, modelChange: { ...deps.modelChange, hostedProvider: "openrouter" } },
+        run,
+        "set_child_bot_model",
+        { bot_id: "bot-scout", provider: "openrouter", model: hostedModel().id },
+      );
+      expect(prepared).toMatchObject({ ok: true });
+    });
   });
 });
 

@@ -41,20 +41,16 @@ import type {
 } from "@rakazo/adapters";
 import {
   acquireComputerExecutionLease,
-  applyCodexLiveCatalog,
-  applyProviderLiveCatalog,
   applyTeachingDesktopInput,
   archiveBot,
   assertSafeRemoteUrl,
   buildMcpCredentialBlob,
   buildModelConnectPlaintext,
-  CHATGPT_OAUTH_PROVIDER,
   CodexCatalogCache,
   ComputerBusyError,
   cancelComputerRunWork,
   checkpointAndRecordComputerWorkspace,
   clearInactiveUserComputerControl,
-  codexLiveCatalogsForSpace,
   codexLiveListsModel,
   commentTicket,
   compatibleThinkingLevels,
@@ -80,14 +76,14 @@ import {
   isSandboxGoneError,
   isScratchpadStatus,
   kickModelCredentialRefresh,
-  listAvailablePiCatalog,
   listBotSecretMetadata,
   listPiCatalog,
   listScratchpadItems,
+  listSpaceModelCatalog,
+  listSpaceModelCredentials,
   McpOAuthBroker,
   mapScratchpadItem,
   mcpServerHealthDto,
-  modelCredentialAuthKindsForSpace,
   modelCredentialDto,
   normalizeSecretDestination,
   PushSessionEndedError,
@@ -105,7 +101,6 @@ import {
   probeCatalogProviderModels,
   probeOpenAiCompatibleModels,
   providerCatalogCache,
-  providerLiveCatalogsForSpace,
   provisionComputer,
   queueComputerUpdate,
   recordMcpServerHealth,
@@ -118,7 +113,6 @@ import {
   revokeScreenControl,
   routineRunModelPin,
   sanitizeComposioError,
-  savedCatalogSelections,
   savePushToken,
   scheduleComputerControlExpiry,
   scheduleComputerSleep,
@@ -207,7 +201,6 @@ import {
   ComputerLimitError,
   claimEmptySpaceDeletionForMember,
   commitBotUpdate,
-  comparePreferenceOrder,
   createExternalConversationRepos,
   createGroupRepos,
   createRepos,
@@ -993,47 +986,15 @@ export function createRouter(deps: RouterDeps) {
     deps.refreshExpiredModelCredential ??
     ((scope: { userId: string; spaceId: string }, secretId: string, provider: string) =>
       kickModelCredentialRefresh(deps.prisma, deps.secrets, scope, secretId, provider));
-  const catalogForSpace = async (actor: Actor) => {
-    const auth = await modelCredentialAuthKindsForSpace(
-      deps.prisma,
-      deps.secrets,
-      actor,
-      deps.billing?.modelCreditsEnabled ? deps.env.defaultProvider : undefined,
-    );
-    const available = listAvailablePiCatalog(auth.byProvider, auth.byModel);
-    const [live, providerLive] = await Promise.all([
-      codexLiveCatalogsForSpace(deps.prisma, deps.secrets, actor, auth, codexCatalog, {
-        // An expired bearer yields no catalog this round; kick the runtime's
-        // locked refresh so the next read can see the account's real list.
-        onExpiredToken: (secretId) =>
-          refreshExpiredCredential(actor, secretId, CHATGPT_OAUTH_PROVIDER),
-      }),
-      providerLiveCatalogsForSpace(
-        deps.prisma,
-        deps.secrets,
-        actor,
-        auth,
-        deps.providerCatalog ?? providerCatalogCache,
-      ),
-    ]);
-    const codexMerged = live.size > 0 ? applyCodexLiveCatalog(available, auth, live) : available;
-    const selected = providerLive.size
-      ? await savedCatalogSelections(deps.prisma, actor.userId)
-      : new Set<string>();
-    return applyProviderLiveCatalog(codexMerged, auth, providerLive, selected).map((entry) =>
-      entry.provider === auth.managedProvider
-        ? {
-            ...entry,
-            managed: true,
-            billing:
-              auth.secretIdByModel[entry.provider]?.[entry.id] ||
-              auth.secretIdByProvider[entry.provider]
-                ? entry.billing
-                : "Uses Rakazo credits",
-          }
-        : entry,
-    );
+  const modelCatalogDeps = {
+    prisma: deps.prisma,
+    secretStore: deps.secrets,
+    hostedProvider: deps.billing?.modelCreditsEnabled ? deps.env.defaultProvider : undefined,
+    codexCatalog,
+    providerCatalog: deps.providerCatalog,
+    refreshExpiredCredential,
   };
+  const catalogForSpace = (actor: Actor) => listSpaceModelCatalog(modelCatalogDeps, actor);
   const groupRepos = createGroupRepos(deps.prisma);
   const taughtSkills = createTaughtSkillsService({
     prisma: deps.prisma,
@@ -1405,56 +1366,13 @@ export function createRouter(deps: RouterDeps) {
         return deps.env.agentRuntime === "scripted" ? [...catalog, scriptedCatalogEntry] : catalog;
       }),
       credentials: authed.models.credentials.handler(async ({ context }) => {
-        const rows = await deps.prisma.userModelCredential.findMany({
-          where: { userId: context.actor.userId },
-          include: {
-            preferences: {
-              where: { userId: context.actor.userId, spaceId: context.actor.spaceId },
-            },
-          },
-          orderBy: newestModelCredentialOrder,
-        });
-        const secrets = rows.length
-          ? await deps.prisma.secret.findMany({
-              where: {
-                id: { in: rows.map((row) => row.secretId) },
-                userId: context.actor.userId,
-                spaceId: null,
-              },
-              select: { id: true, ciphertext: true },
-            })
-          : [];
-        const ciphertextById = new Map(secrets.map((secret) => [secret.id, secret.ciphertext]));
-        const preferenceRanks = new Map(
-          rows
-            .flatMap((row) => row.preferences)
-            .sort(comparePreferenceOrder)
-            .map((preference, index) => [preference.id, index]),
-        );
-        return Promise.all(
-          rows.map(async (row) => {
-            const preference = row.preferences[0];
-            const selected = {
-              ...row,
-              isDefault: preference?.isDefault ?? false,
-              defaultModel: preference?.modelId ?? null,
-              thinkingLevel: preference?.thinkingLevel ?? null,
-            };
-            const dto = (plaintext?: string) => ({
-              ...modelCredentialDto(selected, plaintext),
-              ...(preference ? { preferenceRank: preferenceRanks.get(preference.id) } : {}),
-            });
-            const ciphertext = ciphertextById.get(row.secretId);
-            if (!ciphertext) return dto();
-            try {
-              return dto(await deps.secrets.load(ciphertext, row.secretId));
-            } catch (error) {
-              if (error instanceof SecretStoreUnavailableError)
-                throw new ORPCError("SERVICE_UNAVAILABLE", { cause: error });
-              return dto();
-            }
-          }),
-        );
+        try {
+          return await listSpaceModelCredentials(modelCatalogDeps, context.actor);
+        } catch (error) {
+          if (error instanceof SecretStoreUnavailableError)
+            throw new ORPCError("SERVICE_UNAVAILABLE", { cause: error });
+          throw error;
+        }
       }),
       backups: authed.models.backups.handler(async ({ context }) =>
         listSpaceBackupModels(deps.prisma, context.actor),

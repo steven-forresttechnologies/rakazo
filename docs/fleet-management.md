@@ -29,7 +29,9 @@ message it answers came from you in the app.
 ## Tools
 
 - `list_fleet`: lists active bots, groups and sections. With `bot_id` of a bot it created, it instead
-  returns only that bot's full instructions and current version.
+  returns only that bot's full instructions, current version and model. With `models: true` it
+  instead lists the models `set_child_bot_model` accepts, the same as the bot settings picker,
+  narrowed by `query`.
 - `create_group`: creates a group from existing bots.
 - `update_group`: renames a group or adds and removes members.
 - `organize_bot`: sets a section (`section`), clears it (`clear_section: true`) or sets a pin on a bot

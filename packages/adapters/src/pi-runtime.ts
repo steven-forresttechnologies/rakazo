@@ -1380,7 +1380,8 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
           description: raw.description ? String(raw.description) : "",
           instructions: raw.instructions ? String(raw.instructions) : "",
           prompt: raw.prompt ? String(raw.prompt) : "",
-          computer_mode: raw.computer_mode ? String(raw.computer_mode) : "",
+          // An empty string is not one of its choices, so an omitted mode stays absent.
+          ...(raw.computer_mode ? { computer_mode: String(raw.computer_mode) } : {}),
         };
       }
       if (tool.name === "update_bot" || FLEET_TOOL_NAMES.some((name) => name === tool.name)) {
@@ -2010,7 +2011,13 @@ function builtinParameters(tool: ConnectorTool) {
       bot_id: Type.Optional(Type.String()),
     });
   }
-  if (tool.name === "list_fleet") return Type.Object({ bot_id: Type.Optional(Type.String()) });
+  if (tool.name === "list_fleet") {
+    return Type.Object({
+      bot_id: Type.Optional(Type.String()),
+      models: Type.Optional(Type.Boolean()),
+      query: Type.Optional(Type.String()),
+    });
+  }
   if (tool.name === "create_group") {
     return Type.Object({
       name: Type.String({ minLength: 1 }),
@@ -2155,9 +2162,16 @@ const FLEET_STRING_ARGS = [
   "section",
   "instructions",
   "expected_version",
+  "query",
 ] as const;
 const FLEET_LIST_ARGS = ["bot_ids", "bot_names", "add_bot_ids", "remove_bot_ids"] as const;
-const FLEET_FLAG_ARGS = ["pinned", "clear_section", "clear", "use_attached_image"] as const;
+const FLEET_FLAG_ARGS = [
+  "pinned",
+  "clear_section",
+  "clear",
+  "use_attached_image",
+  "models",
+] as const;
 
 /**
  * Keeps only the fleet and `update_bot` arguments a model sent, coerced to their declared types.

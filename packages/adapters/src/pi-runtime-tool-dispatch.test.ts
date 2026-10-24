@@ -825,6 +825,9 @@ describe("Pi connector tool dispatch", () => {
       undefined,
       { onShellStillRunning: expect.any(Function) },
     );
+    // Pi rejects an empty computer_mode, so leaving it out must not send one.
+    const [, args] = executeTool.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(args).not.toHaveProperty("computer_mode");
   });
 
   it("runs schedule tools and remember sequentially", async () => {
