@@ -105,12 +105,6 @@ msgstr "{0} MB"
 msgid "{0} rollup hours"
 msgstr ""
 
-#. placeholder {0}: usage.runs
-#. placeholder {1}: usage.totalTokens ?? "—"
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "{0} runs · {1} tokens"
-msgstr "{0} çalıştırma · {1} token"
-
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} will still respond to direct mentions."
@@ -1013,6 +1007,10 @@ msgstr ""
 msgid "Calling…"
 msgstr ""
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Calls"
+msgstr "Çağrılar"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Can edit and organise bots it creates"
 msgstr "Oluşturduğu botları düzenleyebilir ve organize edebilir"
@@ -1532,6 +1530,10 @@ msgstr "Kopyala"
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Copy .env example"
 msgstr ""
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Cost"
+msgstr "Maliyet"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
@@ -2836,6 +2838,10 @@ msgstr ""
 msgid "Inherit default"
 msgstr "Varsayılanı devral"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Input"
+msgstr "Girdi"
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Inputs"
 msgstr "Girdiler"
@@ -3266,6 +3272,7 @@ msgstr "dakika"
 msgid "Missed call"
 msgstr ""
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/model-settings/catalog-model-fields.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/model-settings/model-picker.tsx
@@ -3291,10 +3298,6 @@ msgstr "Model kimliği"
 #: src/pages/model-settings/model-picker.tsx
 msgid "Model options"
 msgstr "Model seçenekleri"
-
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Model spend uses your provider keys."
-msgstr "Model harcaması senin sağlayıcı anahtarlarını kullanır."
 
 #: src/pages/model-settings/use-model-settings.ts
 msgid "Model updated."
@@ -3756,6 +3759,10 @@ msgstr "Orijinal mesaj kullanılamıyor"
 #: src/pages/Onboarding.tsx
 msgid "Other model…"
 msgstr "Başka model…"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Output"
+msgstr "Çıktı"
 
 #: src/lib/identity-display.ts
 #: src/pages/Board.tsx
@@ -4353,6 +4360,10 @@ msgstr "Çalışıyor · Durdur"
 #: src/pages/RoutineEditor.tsx
 msgid "Running…"
 msgstr "Çalışıyor…"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Runs"
+msgstr "Çalıştırmalar"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
@@ -5084,6 +5095,10 @@ msgstr "Kime:"
 msgid "Today"
 msgstr "Bugün"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Tokens"
+msgstr "Token"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Tool arguments (JSON)"
 msgstr "Araç bağımsız değişkenleri (JSON)"
@@ -5262,7 +5277,6 @@ msgid "Urgent"
 msgstr ""
 
 #: src/components/SidebarFooter.tsx
-#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Usage"
 msgstr "Kullanım"

@@ -105,12 +105,6 @@ msgstr "{0} MB"
 msgid "{0} rollup hours"
 msgstr ""
 
-#. placeholder {0}: usage.runs
-#. placeholder {1}: usage.totalTokens ?? "—"
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "{0} runs · {1} tokens"
-msgstr "{0} ejecuciones · {1} tokens"
-
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} will still respond to direct mentions."
@@ -1013,6 +1007,10 @@ msgstr "Te está llamando…"
 msgid "Calling…"
 msgstr "Llamando…"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Calls"
+msgstr "Llamadas"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Can edit and organise bots it creates"
 msgstr "Puede editar y organizar los bots que crea"
@@ -1532,6 +1530,10 @@ msgstr "Copiar"
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Copy .env example"
 msgstr ""
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Cost"
+msgstr "Coste"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
@@ -2836,6 +2838,10 @@ msgstr "Llamada entrante"
 msgid "Inherit default"
 msgstr "Heredar predeterminado"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Input"
+msgstr "Entrada"
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Inputs"
 msgstr "Entradas"
@@ -3266,6 +3272,7 @@ msgstr "minutos"
 msgid "Missed call"
 msgstr "Llamada perdida"
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/model-settings/catalog-model-fields.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/model-settings/model-picker.tsx
@@ -3291,10 +3298,6 @@ msgstr "ID del modelo"
 #: src/pages/model-settings/model-picker.tsx
 msgid "Model options"
 msgstr "Opciones del modelo"
-
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Model spend uses your provider keys."
-msgstr "El gasto del modelo usa tus claves de proveedor."
 
 #: src/pages/model-settings/use-model-settings.ts
 msgid "Model updated."
@@ -3756,6 +3759,10 @@ msgstr "Mensaje original no disponible"
 #: src/pages/Onboarding.tsx
 msgid "Other model…"
 msgstr "Otro modelo…"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Output"
+msgstr "Salida"
 
 #: src/lib/identity-display.ts
 #: src/pages/Board.tsx
@@ -4353,6 +4360,10 @@ msgstr "En ejecución · Detener"
 #: src/pages/RoutineEditor.tsx
 msgid "Running…"
 msgstr "Ejecutando…"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Runs"
+msgstr "Ejecuciones"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
@@ -5084,6 +5095,10 @@ msgstr "Para:"
 msgid "Today"
 msgstr "Hoy"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Tokens"
+msgstr "Tokens"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Tool arguments (JSON)"
 msgstr "Argumentos de la herramienta (JSON)"
@@ -5262,7 +5277,6 @@ msgid "Urgent"
 msgstr ""
 
 #: src/components/SidebarFooter.tsx
-#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Usage"
 msgstr "Uso"

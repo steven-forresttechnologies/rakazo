@@ -189,6 +189,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "{name} is working": "{name} 正在工作",
   "{name}’s computer": "{name} 的电脑",
   "{runs} runs · {tokens} tokens": "{runs} 次运行 · {tokens} 个 token",
+  "{calls} calls · {tokens} tokens": "{calls} 次调用 · {tokens} 个 token",
   "@{name}": "@{name}",
   "API key": "API 密钥",
   "Account ID": "账户 ID",

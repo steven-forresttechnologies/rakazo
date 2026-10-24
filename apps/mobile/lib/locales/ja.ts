@@ -640,6 +640,7 @@ export const JA_MESSAGES: Record<string, string> = {
   Usage: "使用量",
   "Your account": "あなたのアカウント",
   "{runs} runs · {tokens} tokens": "{runs}回の実行 · {tokens}トークン",
+  "{calls} calls · {tokens} tokens": "{calls}回の呼び出し · {tokens}トークン",
   "Confirm password": "パスワードを確認",
   "Could not change password": "パスワードを変更できませんでした",
   "New password": "新しいパスワード",

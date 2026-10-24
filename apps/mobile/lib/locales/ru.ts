@@ -212,6 +212,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "{name} is working": "{name} работает",
   "{name}’s computer": "Компьютер {name}",
   "{runs} runs · {tokens} tokens": "Запусков: {runs} · токенов: {tokens}",
+  "{calls} calls · {tokens} tokens": "Вызовов: {calls} · токенов: {tokens}",
   "@{name}": "@{name}",
   "API key": "API-ключ",
   "Account ID": "ID аккаунта",

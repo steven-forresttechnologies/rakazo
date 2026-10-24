@@ -6678,27 +6678,53 @@ export function createRouter(deps: RouterDeps) {
         }));
       }),
       summary: authed.usage.summary.handler(async ({ context }) => {
-        const [result, runGroups] = await Promise.all([
-          deps.prisma.usageRecord.aggregate({
-            where: { spaceId: context.actor.spaceId, userId: context.actor.userId },
-            _sum: { inputTokens: true, outputTokens: true, totalTokens: true },
-            _count: { _all: true, inputTokens: true, outputTokens: true, totalTokens: true },
-          }),
+        const where = { spaceId: context.actor.spaceId, userId: context.actor.userId };
+        const sums = {
+          inputTokens: true,
+          outputTokens: true,
+          totalTokens: true,
+          costUsd: true,
+        } as const;
+        const counts = { _all: true, ...sums } as const;
+        const [result, modelGroups, runGroups] = await Promise.all([
+          deps.prisma.usageRecord.aggregate({ where, _sum: sums, _count: counts }),
           deps.prisma.usageRecord.groupBy({
-            by: ["runId", "parentRunId"],
-            where: { spaceId: context.actor.spaceId, userId: context.actor.userId },
+            by: ["provider", "model"],
+            where,
+            _sum: sums,
+            _count: counts,
           }),
+          deps.prisma.usageRecord.groupBy({ by: ["runId", "parentRunId"], where }),
         ]);
         const runs = new Set(runGroups.map((row) => row.parentRunId ?? row.runId).filter(Boolean))
           .size;
-        const completeSum = (field: "inputTokens" | "outputTokens" | "totalTokens") =>
-          result._count[field] === result._count._all ? (result._sum[field] ?? 0) : null;
+        // A total that skips rows without a count would understate spend, so it reads as unknown.
+        const completeSums = (group: {
+          _sum: Record<keyof typeof sums, number | null>;
+          _count: Record<keyof typeof counts, number>;
+        }) => {
+          const complete = (field: keyof typeof sums) =>
+            group._count[field] === group._count._all ? (group._sum[field] ?? 0) : null;
+          return {
+            inputTokens: complete("inputTokens"),
+            outputTokens: complete("outputTokens"),
+            totalTokens: complete("totalTokens"),
+            costUsd: complete("costUsd"),
+            modelCalls: group._count._all,
+          };
+        };
         return {
-          inputTokens: completeSum("inputTokens"),
-          outputTokens: completeSum("outputTokens"),
-          totalTokens: completeSum("totalTokens"),
-          modelCalls: result._count._all,
+          ...completeSums(result),
           runs,
+          models: modelGroups
+            .map((group) => ({
+              provider: group.provider,
+              model: group.model,
+              ...completeSums(group),
+            }))
+            .sort(
+              (a, b) => (b.totalTokens ?? 0) - (a.totalTokens ?? 0) || b.modelCalls - a.modelCalls,
+            ),
         };
       }),
     },

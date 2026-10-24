@@ -16,6 +16,7 @@ import type {
   TaughtSkill,
   ThreadMessage,
   ThreadSnapshot,
+  UsageSummary,
   VoiceStatus,
 } from "@rakazo/contracts";
 import { ATTACHMENT_MAX_COUNT, attachmentMaxBytes, attachmentSizeLabel } from "@rakazo/contracts";
@@ -725,12 +726,7 @@ function SpaceShell() {
       cancelled = true;
     };
   }, [session.data?.user]);
-  const [usage, setUsage] = useState<{
-    inputTokens: number | null;
-    outputTokens: number | null;
-    totalTokens?: number | null;
-    runs: number;
-  } | null>(null);
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
   const refreshUsage = useCallback(() => {
     void rpc.usage
       .summary()

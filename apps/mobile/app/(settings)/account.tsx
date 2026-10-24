@@ -1,5 +1,5 @@
 import { MenuView } from "@expo/ui/community/menu";
-import type { AccountSecurity, ActionAutoReviewSettings } from "@rakazo/contracts";
+import type { AccountSecurity, ActionAutoReviewSettings, UsageSummary } from "@rakazo/contracts";
 import { accountDisplay, displayName } from "@rakazo/core";
 import * as Notifications from "expo-notifications";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -165,12 +165,7 @@ export default function Account() {
   const [archivedCount, setArchivedCount] = useState(0);
   // A list that fails to refresh keeps its last count, so a passing error doesn't hide the row.
   const archivedCounts = useRef({ bots: 0, groups: 0 });
-  const [usage, setUsage] = useState<{
-    runs: number;
-    inputTokens: number | null;
-    outputTokens: number | null;
-    totalTokens?: number | null;
-  } | null>(null);
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
   const appearance = getCachedAppearancePreference();
   const streamReplies = useSyncExternalStore(
     subscribeResponseStreaming,
@@ -211,12 +206,7 @@ export default function Account() {
     void rpc<MobileMe>("me")
       .then(setMe)
       .catch(() => undefined);
-    void rpc<{
-      runs: number;
-      inputTokens: number | null;
-      outputTokens: number | null;
-      totalTokens?: number | null;
-    }>("usage/summary")
+    void rpc<UsageSummary>("usage/summary")
       .then(setUsage)
       .catch(() => undefined);
     if (Platform.OS === "android") {
@@ -227,6 +217,18 @@ export default function Account() {
     }
   }, []);
 
+  const count = new Intl.NumberFormat(dateLocaleForUi(locale));
+  const usd = new Intl.NumberFormat(dateLocaleForUi(locale), {
+    style: "currency",
+    currency: "USD",
+  });
+  const tokens = (value: number | null | undefined) => (value == null ? "—" : count.format(value));
+  const cost = (value: number | null | undefined) =>
+    value == null
+      ? undefined
+      : value > 0 && value < 0.01
+        ? `<${usd.format(0.01)}`
+        : usd.format(value);
   const usageBlock = (
     <SettingsRow
       accessible
@@ -234,13 +236,30 @@ export default function Account() {
       detail={
         usage
           ? t("{runs} runs · {tokens} tokens", {
-              runs: usage.runs,
-              tokens: usage.totalTokens ?? "—",
+              runs: count.format(usage.runs),
+              tokens: tokens(usage.totalTokens),
             })
           : undefined
       }
+      value={cost(usage?.costUsd)}
     />
   );
+  const usageModels = usage?.models?.length ? (
+    <SettingsGroup>
+      {usage.models.map((row) => (
+        <SettingsRow
+          key={`${row.provider}:${row.model}`}
+          accessible
+          title={row.model}
+          detail={`${row.provider} · ${t("{calls} calls · {tokens} tokens", {
+            calls: count.format(row.modelCalls),
+            tokens: tokens(row.totalTokens),
+          })}`}
+          value={cost(row.costUsd)}
+        />
+      ))}
+    </SettingsGroup>
+  ) : null;
 
   useFocusEffect(
     useCallback(() => {
@@ -446,7 +465,12 @@ export default function Account() {
         contentContainerStyle={[styles.content, stackOptions && styles.compactContent]}
         contentInsetAdjustmentBehavior="automatic"
       >
-        {focus === "usage" ? <SettingsGroup>{usageBlock}</SettingsGroup> : null}
+        {focus === "usage" ? (
+          <>
+            <SettingsGroup>{usageBlock}</SettingsGroup>
+            {usageModels}
+          </>
+        ) : null}
         <SettingsGroup>
           <SettingsRow
             accessibilityRole="button"

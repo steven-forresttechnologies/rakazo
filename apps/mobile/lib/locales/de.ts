@@ -667,6 +667,7 @@ export const DE_MESSAGES: Record<string, string> = {
   Usage: "Nutzung",
   "Your account": "Dein Konto",
   "{runs} runs · {tokens} tokens": "{runs} Ausführungen · {tokens} Token",
+  "{calls} calls · {tokens} tokens": "{calls} Aufrufe · {tokens} Token",
   // app/(settings)/change-password.tsx
   "Confirm password": "Passwort bestätigen",
   "Could not change password": "Passwort konnte nicht geändert werden",

@@ -105,12 +105,6 @@ msgstr "{0} MB"
 msgid "{0} rollup hours"
 msgstr ""
 
-#. placeholder {0}: usage.runs
-#. placeholder {1}: usage.totalTokens ?? "—"
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "{0} runs · {1} tokens"
-msgstr "{0} रन · {1} टोकन"
-
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} will still respond to direct mentions."
@@ -1013,6 +1007,10 @@ msgstr "आपको कॉल कर रहा है…"
 msgid "Calling…"
 msgstr "कॉल हो रही है…"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Calls"
+msgstr "कॉल"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Can edit and organise bots it creates"
 msgstr "अपने बनाए बॉट को संपादित और व्यवस्थित कर सकता है"
@@ -1532,6 +1530,10 @@ msgstr "कॉपी करें"
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Copy .env example"
 msgstr ""
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Cost"
+msgstr "लागत"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
@@ -2836,6 +2838,10 @@ msgstr "आने वाली कॉल"
 msgid "Inherit default"
 msgstr "डिफ़ॉल्ट का पालन करें"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Input"
+msgstr "इनपुट"
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Inputs"
 msgstr "इनपुट"
@@ -3266,6 +3272,7 @@ msgstr "मिनट"
 msgid "Missed call"
 msgstr "मिस्ड कॉल"
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/model-settings/catalog-model-fields.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/model-settings/model-picker.tsx
@@ -3291,10 +3298,6 @@ msgstr "मॉडल आईडी"
 #: src/pages/model-settings/model-picker.tsx
 msgid "Model options"
 msgstr "मॉडल विकल्प"
-
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Model spend uses your provider keys."
-msgstr "मॉडल का खर्च आपकी प्रोवाइडर कुंजियों से होता है।"
 
 #: src/pages/model-settings/use-model-settings.ts
 msgid "Model updated."
@@ -3756,6 +3759,10 @@ msgstr "मूल संदेश उपलब्ध नहीं है"
 #: src/pages/Onboarding.tsx
 msgid "Other model…"
 msgstr "अन्य मॉडल…"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Output"
+msgstr "आउटपुट"
 
 #: src/lib/identity-display.ts
 #: src/pages/Board.tsx
@@ -4353,6 +4360,10 @@ msgstr "चल रहा है · रोकें"
 #: src/pages/RoutineEditor.tsx
 msgid "Running…"
 msgstr "चल रहा है…"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Runs"
+msgstr "रन"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
@@ -5084,6 +5095,10 @@ msgstr "प्रति:"
 msgid "Today"
 msgstr "आज"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Tokens"
+msgstr "टोकन"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Tool arguments (JSON)"
 msgstr "टूल आर्ग्युमेंट (JSON)"
@@ -5262,7 +5277,6 @@ msgid "Urgent"
 msgstr ""
 
 #: src/components/SidebarFooter.tsx
-#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Usage"
 msgstr "उपयोग"

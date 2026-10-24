@@ -105,12 +105,6 @@ msgstr "{0} MB"
 msgid "{0} rollup hours"
 msgstr "{0}のまとめ間隔（時間）"
 
-#. placeholder {0}: usage.runs
-#. placeholder {1}: usage.totalTokens ?? "—"
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "{0} runs · {1} tokens"
-msgstr "{0}回の実行 · {1}トークン"
-
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} will still respond to direct mentions."
@@ -1013,6 +1007,10 @@ msgstr "着信中…"
 msgid "Calling…"
 msgstr "発信中…"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Calls"
+msgstr "呼び出し"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Can edit and organise bots it creates"
 msgstr "自分が作成したボットを編集・整理できます"
@@ -1532,6 +1530,10 @@ msgstr "コピー"
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Copy .env example"
 msgstr ".env の例をコピー"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Cost"
+msgstr "コスト"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
@@ -2836,6 +2838,10 @@ msgstr "着信"
 msgid "Inherit default"
 msgstr "デフォルトを継承"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Input"
+msgstr "入力"
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Inputs"
 msgstr "入力"
@@ -3266,6 +3272,7 @@ msgstr "分"
 msgid "Missed call"
 msgstr "不在着信"
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/model-settings/catalog-model-fields.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/model-settings/model-picker.tsx
@@ -3291,10 +3298,6 @@ msgstr "モデルID"
 #: src/pages/model-settings/model-picker.tsx
 msgid "Model options"
 msgstr "モデルのオプション"
-
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Model spend uses your provider keys."
-msgstr "モデルの利用料金はあなたのプロバイダーキーで支払われます。"
 
 #: src/pages/model-settings/use-model-settings.ts
 msgid "Model updated."
@@ -3756,6 +3759,10 @@ msgstr "元のメッセージを表示できません"
 #: src/pages/Onboarding.tsx
 msgid "Other model…"
 msgstr "その他のモデル…"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Output"
+msgstr "出力"
 
 #: src/lib/identity-display.ts
 #: src/pages/Board.tsx
@@ -4353,6 +4360,10 @@ msgstr "実行中 · 停止"
 #: src/pages/RoutineEditor.tsx
 msgid "Running…"
 msgstr "実行中…"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Runs"
+msgstr "実行"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
@@ -5084,6 +5095,10 @@ msgstr "宛先:"
 msgid "Today"
 msgstr "今日"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Tokens"
+msgstr "トークン"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Tool arguments (JSON)"
 msgstr "ツールの引数（JSON）"
@@ -5262,7 +5277,6 @@ msgid "Urgent"
 msgstr "緊急"
 
 #: src/components/SidebarFooter.tsx
-#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Usage"
 msgstr "使用量"

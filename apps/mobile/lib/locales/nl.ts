@@ -650,6 +650,7 @@ export const NL_MESSAGES: Record<string, string> = {
   Usage: "Gebruik",
   "Your account": "Je account",
   "{runs} runs · {tokens} tokens": "{runs} uitvoeringen · {tokens} tokens",
+  "{calls} calls · {tokens} tokens": "{calls} aanroepen · {tokens} tokens",
   "Confirm password": "Wachtwoord bevestigen",
   "Could not change password": "Wachtwoord wijzigen mislukt",
   "New password": "Nieuw wachtwoord",

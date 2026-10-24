@@ -105,12 +105,6 @@ msgstr "{0} MB"
 msgid "{0} rollup hours"
 msgstr ""
 
-#. placeholder {0}: usage.runs
-#. placeholder {1}: usage.totalTokens ?? "—"
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "{0} runs · {1} tokens"
-msgstr "{0} 次运行 · {1} tokens"
-
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} will still respond to direct mentions."
@@ -1013,6 +1007,10 @@ msgstr ""
 msgid "Calling…"
 msgstr ""
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Calls"
+msgstr "调用"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Can edit and organise bots it creates"
 msgstr "可编辑和整理它创建的机器人"
@@ -1532,6 +1530,10 @@ msgstr "复制"
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Copy .env example"
 msgstr ""
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Cost"
+msgstr "费用"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
@@ -2836,6 +2838,10 @@ msgstr ""
 msgid "Inherit default"
 msgstr "沿用默认"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Input"
+msgstr "输入"
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Inputs"
 msgstr "输入"
@@ -3266,6 +3272,7 @@ msgstr "分钟"
 msgid "Missed call"
 msgstr ""
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/model-settings/catalog-model-fields.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/model-settings/model-picker.tsx
@@ -3291,10 +3298,6 @@ msgstr "模型 ID"
 #: src/pages/model-settings/model-picker.tsx
 msgid "Model options"
 msgstr "模型选项"
-
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Model spend uses your provider keys."
-msgstr "模型费用使用你的提供方密钥。"
 
 #: src/pages/model-settings/use-model-settings.ts
 msgid "Model updated."
@@ -3756,6 +3759,10 @@ msgstr "原消息不可用"
 #: src/pages/Onboarding.tsx
 msgid "Other model…"
 msgstr "其他模型…"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Output"
+msgstr "输出"
 
 #: src/lib/identity-display.ts
 #: src/pages/Board.tsx
@@ -4353,6 +4360,10 @@ msgstr "运行中 · 停止"
 #: src/pages/RoutineEditor.tsx
 msgid "Running…"
 msgstr "正在运行…"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Runs"
+msgstr "运行"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
@@ -5084,6 +5095,10 @@ msgstr "至:"
 msgid "Today"
 msgstr "今天"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Tokens"
+msgstr "Token"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Tool arguments (JSON)"
 msgstr "工具参数（JSON）"
@@ -5262,7 +5277,6 @@ msgid "Urgent"
 msgstr ""
 
 #: src/components/SidebarFooter.tsx
-#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Usage"
 msgstr "用量"
