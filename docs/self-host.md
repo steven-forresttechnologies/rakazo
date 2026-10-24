@@ -168,7 +168,7 @@ Postgres stays on the Compose network only (not published on the host), matching
 compose. Credentials come from `.env` (`POSTGRES_PASSWORD` is required). Prefer a URI-safe value
 (`openssl rand -hex 16`); characters such as `@ : / ? # %` break the interpolated `DATABASE_URL`
 inside Compose. Official Postgres images set user, password, and database only on first volume
-init, so an existing `pgdata` volume keeps its original identity: keep those values in `.env`, or
+init, so an existing database volume keeps its original identity: keep those values in `.env`, or
 change them in place with `ALTER ROLE` / rename. Recreate the volume only after a backup (or when
 the data is disposable); `docker compose down -v` deletes all Postgres state. For host-side clients
 (`pnpm db:migrate`, GUI tools),
@@ -635,9 +635,15 @@ way by default.
 Only configure an endpoint you control: prompts, attachments, and tool results sent to that model
 leave Rakazo through this URL. Leave `RAKAZO_LOCAL_MODELS` blank to disable the provider.
 
+### Ollama Cloud
+
+In **Settings → Models**, choose **Ollama Cloud**, paste an API key from ollama.com, then **Find models**. This uses an OpenAI-compatible connection with no environment configuration. `ollama.com` is the only public host allowed without `RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC=1`.
+
 Each user can also connect their own OpenAI-compatible endpoint from **Connect a model** /
 **Settings → Models** on web and mobile. Choose **OpenAI-compatible**, enter the server base URL
 (for example `http://127.0.0.1:8000/v1`), the exact model id, and an optional API key.
+Add optional request headers under **Advanced**; values are stored encrypted, and only their names
+are shown afterwards.
 Public hosts and ordinary hostnames need `RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC=1` and HTTPS.
 Literal private IP, loopback, and `host.docker.internal` targets do not, but only the deployment
 owner can use them, checked on save, on model discovery, and on every run. Set
@@ -927,7 +933,7 @@ support. Existing token limits still apply; effort is not a separate reasoning-t
 
 Do not commit `.env`. Never put `COMPOSIO_API_KEY`, OpenRouter keys, or provider tokens in git, logs, or chat.
 
-Optional messaging platforms (iMessage, Slack, WhatsApp, Telegram, Feishu/Lark) mount when their env credentials are set — see `.env.example`. Point a Feishu/Lark bot event subscription at `/api/v1/messaging/webhook/lark` (webhook/HTTP inbound only; do not enable long connection). Groups stay iMessage-only. Telegram can run several bots side by side (`TELEGRAM_BOT_TOKEN_<NAME>` plus `TELEGRAM_WEBHOOK_SECRET_TOKEN_<NAME>`), for example one per space, so the same person can chat with a different Rakazo bot through each.
+Optional messaging platforms (iMessage, Slack, WhatsApp, Telegram, Feishu/Lark) mount when their env credentials are set — see `.env.example`. The Lark adapter and official SDK load only when configured. Point a Feishu/Lark bot event subscription at `/api/v1/messaging/webhook/lark` (webhook/HTTP inbound only; do not enable long connection). Groups stay iMessage-only. Telegram can run several bots side by side (`TELEGRAM_BOT_TOKEN_<NAME>` plus `TELEGRAM_WEBHOOK_SECRET_TOKEN_<NAME>`), for example one per space, so the same person can chat with a different Rakazo bot through each.
 
 ### Settings with names you choose
 
@@ -1047,15 +1053,90 @@ docker compose -f docker-compose.images.yml exec -T api \
 The export is plaintext: store it like the database itself. Files are not included; use
 `content-encryption decrypt` to make them readable on disk.
 
+## Bot homes in object storage
+
+Each bot computer has a home: its files, logged-in browser profiles and CLI tokens. By default
+homes live under `DATA_DIR/homes` on the server. Set `OBJECT_STORAGE_BUCKET` to keep them in any
+S3-compatible bucket instead, so `DATA_DIR` is only a cache and API and worker hosts no longer need
+a shared disk for homes. Leave it unset to keep homes on local disk, as before.
+The same connection also stores new artifacts; see [shared storage migration](#shared-storage-migration)
+for migrating existing files and push registrations.
+
+```env
+OBJECT_STORAGE_BUCKET=rakazo-homes
+OBJECT_STORAGE_ENDPOINT=https://storage.example.com
+OBJECT_STORAGE_REGION=us-east-1
+OBJECT_STORAGE_ACCESS_KEY_ID=replace-me
+OBJECT_STORAGE_SECRET_ACCESS_KEY=replace-me
+# Optional: a key prefix, when the bucket holds anything else.
+OBJECT_STORAGE_PREFIX=
+# Optional: true for services that address buckets in the path rather than the host name.
+OBJECT_STORAGE_PATH_STYLE=false
+```
+
+Only the API and worker read these settings. Bot computers never receive the credentials or
+links to stored objects; files still reach them through the server, as before. The settings
+apply to every provider, including Docker computers, which keep mounting their cached home.
+
+**Encryption.** Homes are encrypted on the server before upload, whatever `CONTENT_ENCRYPTION`
+says; the bucket only ever holds ciphertext. Each home has its own random data key, kept on the
+computer's database row and wrapped by its space's content key (see
+[content encryption](./content-encryption.md)). Each stored revision is one object, sealed in
+authenticated segments bound to that home and revision, so a modified, truncated or swapped
+object fails to restore instead of restoring the wrong files. Object keys are random ids
+(`homes/<id>/<revision>`) that name no bot, user or space. Back up the database and the
+encryption keys as before: the bucket cannot be read without them.
+
+**The bucket.** Use a private bucket, or a prefix of one, for this deployment alone: the worker
+deletes objects under `homes/` that no home in this database owns. Block public access. The
+credentials need to read, write, list and delete objects in it, and nothing else. Turn on bucket
+versioning, with a lifecycle rule that expires noncurrent versions after your backup window, so
+a mistaken deletion can be undone. `scripts/backup.sh` does not copy the bucket; versioning, or the
+service's own replication, is its backup.
+
+**What is stored.** Each save uploads the whole home as one object (in parts of up to 16 MiB for
+large homes) and then deletes the previous one, so a home costs about one object however many
+files it has. Homes are saved when a run finishes or fails, before a computer stops, and before
+it sleeps, as before.
+
+**Deleting.** Deleting a bot with its own computer, or a space (including the personal spaces
+removed with an account), deletes each home's key with its computer's row, so the stored objects
+become unreadable at once. The worker deletes those
+objects within the hour, along with any revision an interrupted save left behind.
+
+**The cache.** `DATA_DIR/homes` holds a copy of homes in use. A copy whose revision matches the
+bucket is downloaded again whenever it is missing, so you can remove it. Docker computers work
+directly in their copy until their next save, so only remove the copy of a Docker computer that
+is stopped. Remote computers' copies always match the bucket once saved.
+
+### Moving existing homes
+
+After setting the bucket, restart the API and worker. Each home is uploaded the next time it is
+saved; until then its local copy is used. To upload the rest at once, run this where `DATA_DIR`
+is mounted. It skips homes already stored, so it can be stopped and run again. Each upload is
+downloaded and checked before the home counts as moved. It never deletes local files.
+
+```bash
+docker compose -f docker-compose.images.yml exec api pnpm --filter @rakazo/api home-storage migrate --dry-run
+docker compose -f docker-compose.images.yml exec api pnpm --filter @rakazo/api home-storage migrate
+```
+
+Homes listed as having no computer belong to bots that no longer exist; they are left alone.
+Once a run reports no failures and nothing left to upload, remove the local copies: stop Docker
+computers, stop the API and worker, move `DATA_DIR/homes` and `DATA_DIR/home-revisions` aside,
+start them again and check a few bots' files, then delete the moved directories.
+
 ## Backup
 
 ```bash
 ./scripts/backup.sh
 ```
 
-This dumps Postgres (`pg_dump`) and archives `data/` into `backups/<stamp>/`. A missing
-`data/` produces an empty archive; database or archive errors fail the backup. Discard the
-output directory of any failed run.
+This dumps Postgres (`pg_dump`) and archives `data/` into `backups/<stamp>/`. Backup
+directories have mode `0700`, and both artifacts have mode `0600`, including on reused paths.
+A missing `data/` or `RAKAZO_BACKUP_SKIP_HOMES=1` produces an empty archive that restore treats
+as omitted homes. Database or archive errors fail the backup. Discard the output directory of
+any failed run.
 
 ## Public single-VM deployment
 
@@ -1149,7 +1230,9 @@ Once a release has been published you can switch this host to prebuilt images by
 See [Published images and tags](#published-images-and-tags) for the tag contract.
 
 The root `.env` is excluded from both Git and the Docker build context. The database, application data,
-and Caddy certificates live in named Docker volumes.
+and Caddy certificates live in named Docker volumes. The `webassets` volume keeps the hashed web assets
+of recent builds (up to 20, each for a week after it is replaced), so open tabs keep loading after an
+update; it needs no setup and can be deleted at any time.
 
 The production Compose file pins Postgres and Caddy to multi-architecture manifest digests, and the
 published application/updater builds pin their base-image digests. Refresh those pins deliberately
@@ -1225,26 +1308,79 @@ local snapshot but fails the service, so the backup alert fires.
 Run these where the identity file lives, never leaving it on the server. Fetch a snapshot with
 `rclone copy offsite:rakazo-backups/<stamp> ./<stamp>` or `scp`, then run the drill, which checks the
 checksums and decrypts each file into `pg_restore --list` and `tar -t` without writing plaintext
-(it needs `age`, `pg_restore` of the server's major version or newer, and `tar`):
+(it needs `age`, `pg_restore` of the server's major version or newer, which is 18 for the
+production Compose file, and `tar`):
 
 ```bash
 bash infra/compose/backup-drill.sh ./<stamp> rakazo-backup.key
 ```
 
-To restore, stop the application services, then stream each file to the server:
+**Never extract appdata over the active volume.** Files created after the snapshot would survive
+and mix with the restored database. Extract into a clean sibling directory, then preserve the
+old tree before replacing it. Pause automatic deploys and the updater during recovery. Stop
+any other processes that write to this database or volume. Keep the application stopped if
+any step fails.
+
+Run these commands in one Bash session on the machine with the identity file. Replace the
+snapshot and volume names first. `VOLUME` must name the volume the API currently mounts at
+`/data`, which can differ when the stack uses another project name.
 
 ```bash
+set -euo pipefail
+umask 077
 COMPOSE="sudo docker compose --env-file .env -f infra/compose/docker-compose.prod.yml"
+VOLUME=rakazo-prod_appdata
+
 ssh deploy@app.example.com "cd /srv/rakazo && $COMPOSE stop api worker web"
-age -d -i rakazo-backup.key <stamp>/rakazo.dump.age | ssh deploy@app.example.com \
-  "cd /srv/rakazo && $COMPOSE exec -T postgres sh -c 'pg_restore --clean --if-exists --no-owner -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\"'"
+ROLLBACK_DUMP="$(mktemp "$PWD/before-restore.dump.XXXXXX")"
+if ! ssh deploy@app.example.com \
+  "cd /srv/rakazo && $COMPOSE exec -T postgres sh -c 'pg_dump -Fc -U \"\$POSTGRES_USER\" \"\$POSTGRES_DB\"'" \
+  > "$ROLLBACK_DUMP"; then
+  printf 'Pre-restore dump failed. Do not use the partial file at %s. Keep the application stopped.\n' "$ROLLBACK_DUMP" >&2
+  exit 1
+fi
+
+APPDATA="$(ssh deploy@app.example.com "sudo docker volume inspect -f '{{.Mountpoint}}' '$VOLUME'")"
+RESTORE="$(ssh deploy@app.example.com "sudo mktemp -d '${APPDATA%/*}/rakazo-restore.XXXXXX'")"
+ssh deploy@app.example.com "sudo mkdir '$RESTORE/staged'"
+printf 'Record this rollback pair:\nDatabase dump: %s\nData tree on deploy@app.example.com: %s/previous\n' \
+  "$ROLLBACK_DUMP" "$RESTORE"
 age -d -i rakazo-backup.key <stamp>/appdata.tgz.age | ssh deploy@app.example.com \
-  "sudo tar -xzf - --numeric-owner -C \"\$(sudo docker volume inspect -f '{{.Mountpoint}}' rakazo-prod_appdata)\""
-ssh deploy@app.example.com "cd /srv/rakazo && $COMPOSE up -d --wait --pull never"
+  "sudo tar -xzf - --numeric-owner -C '$RESTORE/staged'"
+
+age -d -i rakazo-backup.key <stamp>/rakazo.dump.age | ssh deploy@app.example.com \
+  "cd /srv/rakazo && $COMPOSE exec -T postgres sh -c 'pg_restore --clean --if-exists --no-owner --exit-on-error --single-transaction -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\"'"
+
+ssh deploy@app.example.com \
+  "sudo mv -- '$APPDATA' '$RESTORE/previous' && sudo mv -- '$RESTORE/staged' '$APPDATA'"
+ssh deploy@app.example.com \
+  "cd /srv/rakazo && $COMPOSE up -d --force-recreate --wait --pull never api worker web"
 ```
 
-Replace `rakazo-prod_appdata` with the volume the api container mounts at `/data` if the stack uses another
-project name. Plaintext snapshots restore the same way with `cat` in place of `age -d`.
+The archive must extract successfully before the SQL import starts. The clean staging directory
+and the rollback tree sit beside the volume's active data directory, on the same filesystem.
+Recreating the application containers makes them mount the replacement directory.
+`--single-transaction` rolls back SQL errors, but it cannot include the directory switch.
+After the import commits, a failed switch or startup can leave the database and active tree
+out of sync. If startup fails, stop `api worker web` again, including containers that did start.
+
+`$ROLLBACK_DUMP` names a private, plaintext rollback dump. `mktemp` creates a new mode-`0600`
+file for each attempt without overwriting `before-restore.dump`, earlier rollback dumps, or
+existing symlink targets. If the dump fails, the commands stop with the application still
+stopped. The printed partial file is not usable rollback data. Preserve earlier rollback pairs
+and fix the dump failure before starting another recovery attempt.
+
+Record the printed database dump path together with its matching remote `$RESTORE/previous`
+tree path. Keep that pair until you have checked the restored application. Do not remove the
+Docker volume while you need the rollback tree. For rollback after SQL commits, keep the
+application stopped and restore the recorded `$ROLLBACK_DUMP` into a freshly created empty
+database. Move the failed active tree to a separate path for diagnosis, then move that attempt's
+recorded `$RESTORE/previous` tree back to `$APPDATA` and recreate the application containers.
+If the first directory move failed, the old tree is still at `$APPDATA`. Inspect both paths
+before moving anything. Switching the tree alone does not roll back the database.
+
+Plaintext snapshots use `cat` in place of `age -d` and the filenames `rakazo.dump` and
+`appdata.tgz`. Use the same clean-directory procedure.
 
 The scheduled backup uses `/srv/rakazo` by default. For another deployment directory, set
 `RAKAZO_DEPLOY_DIR=/absolute/path/to/checkout` in a root-owned `/etc/rakazo/backup.env`
@@ -1335,14 +1471,15 @@ endpoint that accepts a JSON array of events with a bearer token, for example Ax
 RAKAZO_AUDIT_SINK_URL=https://ingest.example.com/v1/events
 # Optional: name the SSH keys you expect (fingerprints from `ssh-keygen -lf key.pub`).
 RAKAZO_AUDIT_KNOWN_KEYS=SHA256:replace-with-fingerprint=laptop SHA256:replace-with-fingerprint=ci
-# Optional: RAKAZO_AUDIT_TOKEN_FILE (default /etc/rakazo/audit-ship.token) and RAKAZO_AUDIT_HOST
-# (default: the hostname).
+# Optional: RAKAZO_AUDIT_TOKEN_FILE (default /etc/rakazo/audit-ship.token), RAKAZO_AUDIT_HOST
+# (default: the hostname), and RAKAZO_AUDIT_HEARTBEAT_SECONDS (default 10800, three hours).
 ```
 
 Use a token that can only write to that one destination, so a compromised host cannot read or delete
 what it already sent. The shipper follows `/var/log/auth.log` and the audit log and sends `ssh.login`
 (with `key_name`, `unknown` for keys not listed), `ssh.failed`, `sudo.command`, `su`,
-`identity.change`, and `file.change` (with the rule's `watch` key and the changed `paths`). Every
+`identity.change`, and `file.change` (with the rule's `watch` key and the changed `paths`), plus a
+`shipper.heartbeat` on start and every `RAKAZO_AUDIT_HEARTBEAT_SECONDS`. Every
 event carries `event`, `host`, `source`, `message`, and `_time`. Offsets advance only after the sink
 accepts a batch, and failures retry with backoff, so events arrive at least once. On first start it
 ships the current auth log and starts the audit log at its end. With monitoring installed, the host
@@ -1356,7 +1493,7 @@ filters in any log store:
 | Login with an unnamed key | `where event == "ssh.login" and key_name == "unknown"` |
 | Watched file changed | `where event == "file.change"` outside your own deploys and maintenance |
 | Root use outside the deploy account | `where (event == "sudo.command" and user != "deploy") or event == "su" or event == "identity.change"` |
-| Shipping stopped | no events from a `host` for longer than it normally stays quiet |
+| Shipping stopped | no `shipper.heartbeat` from a `host` for more than two heartbeat intervals |
 
 ### Docker computers on the production stack
 
@@ -1413,10 +1550,30 @@ docker compose --env-file .env \
 ## Restore
 
 For backups created by `scripts/backup.sh`, use an empty `rakazo` database in the development
-Compose stack, with application services stopped. The SQL import runs in one transaction and
-stops on the first error, including conflicts with existing tables. Files are restored and
-application services started only after the import succeeds. This script does not consume the
-production snapshot's custom-format `rakazo.dump` or `appdata.tgz`.
+Compose stack. The script validates and extracts the homes archive in a clean sibling directory
+before touching the database, then stops the API, worker, and supervisor. It rejects a `data/`
+path that is a symlink or a non-directory. Stop bot computers and any other processes that
+write to this database or tree before running the script.
+
+The SQL import runs in one transaction and stops on the first error, including conflicts with
+existing tables. An invalid archive or failed import leaves the current data tree unchanged.
+After SQL succeeds, the script moves the current tree to `data.rollback.<random>/data`,
+prints that path, and replaces `data/` with the saved tree. Files absent from the snapshot
+do not remain in the active tree. A missing homes archive or an empty archive from omitted homes
+leaves `data/` unchanged. An archive containing an empty `data/` directory replaces it with an
+empty tree.
+
+Application services start only after the import and tree replacement succeed. Once writer
+shutdown starts, a later failure or interruption makes the script attempt to stop the API,
+worker, and supervisor again. This includes services that started before final startup failed.
+The script preserves the original failure status even if cleanup fails. If Docker cannot stop
+the services, stop them before recovery.
+
+A failure after the SQL commit cannot roll back the database automatically. Leave the
+application stopped, preserve both trees, and recover a matching database before moving the
+rollback tree back to `data/`. Keep a separate database backup from before recovery if you
+need that rollback. This script does not consume the production snapshot's custom-format
+`rakazo.dump` or `appdata.tgz`.
 
 ```bash
 ./scripts/restore.sh backups/<stamp>
@@ -1476,6 +1633,47 @@ migrations leave that login alone. Undo it with
 the extra variable and connects as the owner, but releases from the same day also encrypt content
 at rest: run `content-encryption decrypt` before rolling back past them
 ([content encryption](./content-encryption.md#rollout)), or older releases show ciphertext.
+
+### Upgrading to Postgres 18
+
+The production and source-checkout Compose files run Postgres 18. Installs created before that
+keep their data in a Postgres 16 volume (`pgdata`), which Postgres 18 cannot open. Until the data
+is copied to the new `postgres` volume, the database container exits and logs that it found
+PostgreSQL data in `/var/lib/postgresql/16/docker`, and production deploys stop before replacing
+anything. Nothing is deleted or started empty. New installs need nothing. The published-images
+file (`docker-compose.images.yml`, also used by the desktop app) stays on Postgres 16.
+
+Take a backup and run the drill on it first ([encrypted backups](#encrypted-and-off-site-backups)).
+Then update the checkout and run the upgrade as root:
+
+```bash
+cd /srv/rakazo
+git pull --ff-only
+sudo infra/compose/upgrade-postgres.sh
+```
+
+When the stack uses other Compose files, such as the Docker computers overlay or the
+source-checkout stack, pass all of them:
+`sudo RAKAZO_DEPLOY_DIR="$PWD" infra/compose/upgrade-postgres.sh infra/compose/docker-compose.yml`.
+Set `COMPOSE_PROJECT_NAME` if the stack runs under a custom `-p`, and on restricted networks set
+`RAKAZO_POSTGRES_16_IMAGE` to your mirror of the previous Postgres 16 image (`POSTGRES_IMAGE` must
+now name a Postgres 18 image).
+
+The script stops the stack, copies every role (with its password) and database from Postgres 16
+with `pg_dumpall`, and compares roles, memberships, ownership, grants, row-level security
+policies, sequences and the row count of every table. It also checks that `rakazo_app` signs in
+with `POSTGRES_APP_PASSWORD` and does not bypass row-level security. Only then does it switch
+Postgres 18 over and restart the services that were running. The site is down for the whole copy,
+which takes about as long as dumping and restoring the database: a few minutes for a small one. It needs free disk for one more copy of the
+database plus 1 GiB. Running it again after it succeeded does nothing. If any step fails, it stops
+with the stack down and the Postgres 16 data unchanged; fix the error and run it again. On the
+production host, then rerun the deploy that stopped.
+
+The Postgres 16 volume stays as it was, mounted read-only. To roll back, check out the previous
+release and start the stack: it runs Postgres 16 on the original data. Anything written after the
+upgrade exists only on Postgres 18, so roll back right away or not at all, and pause CI deploys
+until you upgrade again. Once you no longer need the rollback, stop `postgres`, remove the
+`<project>_pgdata` volume and start it again; Compose recreates that volume empty.
 
 ### Space privacy-boundary migration
 
@@ -1685,9 +1883,9 @@ rather not grant the capability.
 ## Other deployment layouts
 
 API and worker need always-on processes; serverless request handlers are not sufficient. Use a
-Node.js version supported by the root `package.json`, Postgres 16 and a persistent `DATA_DIR` volume shared by API and worker, with encrypted off-host
-backups. The current home store uses a local filesystem, so deployments on separate hosts need a
-shared filesystem; an object-storage adapter is not available yet.
+Node.js version supported by the root `package.json`, Postgres 16 or newer and a persistent `DATA_DIR` volume shared by API and worker, with encrypted off-host
+backups. Homes stay on that volume unless they are kept in
+[object storage](#bot-homes-in-object-storage); other `DATA_DIR` files still need it shared.
 
 Use the same HTTPS origin for the web app, `/api`, and `/rpc`. Preserve the authenticated screen
 proxy routes. Choose a [computer provider](#choosing-a-computer-provider) appropriate to the
@@ -1739,6 +1937,8 @@ native file flow on mobile. No new mobile player or settings screen is required.
 
 The iOS and Android app can also point at a self-hosted origin at runtime. On the sign-in screen, tap **Use a custom server** and enter the same HTTPS origin as `WEB_ORIGIN` (for example `https://app.example.com`). Store builds still default to `EXPO_PUBLIC_API_URL`; the in-app setting is an override for people running their own API. Changing the server signs the device out of any previous session.
 
+Plain `http://` is accepted only for a private IP, `localhost`, or a `.local` name. A hostname reached over a VPN such as WireGuard or Tailscale needs HTTPS with a certificate the phone trusts, for example a real domain with a Let's Encrypt certificate issued through a DNS challenge.
+
 ### Passkeys
 
 Passkeys are on whenever `WEB_ORIGIN` is an HTTPS domain (or `localhost` in development); the
@@ -1770,3 +1970,57 @@ in MiB (1 MiB = 1,048,576 bytes). It defaults to `10` and must be a positive int
 Set it in `.env` and restart the API, worker, and Docker supervisor (when used). Web, desktop, and mobile use the
 limit advertised by the server. If a reverse proxy limits request bodies, allow
 room for base64 encoding (about 4/3 of the file size) and the JSON envelope.
+
+## Shared storage migration
+
+Push notification registrations now live in Postgres, encrypted with `ENCRYPTION_KEY`.
+The same key must be configured on every API and worker replica. Registrations remain
+bound to their authenticated session; deleting an account also deletes its registration.
+
+With `OBJECT_STORAGE_BUCKET` configured, new artifact contents use the existing
+S3-compatible connection alongside computer homes. Artifact contents are always encrypted
+before upload using the space's content key and authenticated segments bound to the
+artifact identity. This applies even with `CONTENT_ENCRYPTION=off`. Metadata and access
+checks remain in Postgres; clients and sandboxes receive neither bucket credentials nor
+public object URLs. Without object storage, artifacts continue using the local volume.
+
+Existing artifact rows continue reading their local files until migrated. Before spreading
+API or worker replicas across machines, migrate files from every original application
+volume. Back up the database and volume first. Deploy the schema migration and the new
+application version, then stop **all API and worker processes**, including old releases,
+while running the following commands from a maintenance container with the original volume,
+`DATABASE_URL`, `ENCRYPTION_KEY`, content master keys, and object storage configuration:
+
+```sh
+# Published image (run from /app/apps/api):
+node dist/cli/shared-storage.js artifacts --dry-run
+node dist/cli/shared-storage.js artifacts
+node dist/cli/shared-storage.js push-tokens --dry-run
+node dist/cli/shared-storage.js push-tokens
+
+# Source checkout equivalents:
+pnpm --filter @rakazo/api shared-storage artifacts
+pnpm --filter @rakazo/api shared-storage push-tokens
+```
+
+The artifact migration uploads and decrypts each file to verify it before conditionally
+updating its database storage key. It keeps the original local files and skips rows already
+migrated, so interrupted runs can resume. A database failure after upload can leave an
+unreferenced object; do not delete objects blindly after a failed migration. Keep local
+originals until the migration is complete and verified. Files absent from the mounted volume
+are counted as pending while migration continues for files present on that volume. Run the
+command on each original volume, then run `artifacts --dry-run` again and require `pending: 0`
+before starting independent replicas. Object-backed artifacts require
+object storage to remain configured; old application versions cannot read their new keys.
+The local content-encryption CLI operates on local artifacts only; object artifacts stay
+encrypted and retain access through the key versions referenced in their headers.
+
+The push import preserves registrations with a live session, skips missing/expired or
+sessionless registrations, accounts already registered in Postgres, and devices owned by any
+existing database registration. Import never hands a device back to an older account. It archives processed
+files with a `.migrated` suffix. Those archives are never used as a runtime fallback, so they
+cannot restore a registration after logout. Clients skipped during migration register again
+when they next open the app. Remove the archived token files after verifying the import.
+Restart API and worker processes after both commands finish. A schema-only rollback remains
+compatible with the previous release, but the old code does not read database registrations
+or object-backed artifacts.

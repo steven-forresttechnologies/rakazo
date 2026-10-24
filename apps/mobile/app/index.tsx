@@ -26,6 +26,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import type { ViewToken } from "react-native";
 import {
   ActivityIndicator,
   Alert,
@@ -55,7 +56,6 @@ import { HomeErrorState } from "../components/home-error-state";
 import { InboxSwipeRow } from "../components/inbox-swipe-row";
 import { NativeSymbol } from "../components/native-symbol";
 import { useUnreadJumpPills } from "../components/unread-jump-overlay";
-import { WorkingIndicator } from "../components/WorkingIndicator";
 import {
   activityPreview,
   activityStatusLabel,
@@ -96,7 +96,7 @@ import {
   notifyArchivedChatsChanged,
   onArchivedChatsChanged,
 } from "../lib/archived-chats";
-import { mobileBotAvatarPresentation } from "../lib/bot-avatar";
+import { AvatarRow, AvatarViewportScope, createAvatarViewport } from "../lib/avatar-life";
 import { confirmDeleteBot, confirmDeleteGroup } from "../lib/bot-lifecycle";
 import type { CollapsedSections } from "../lib/collapsed-sections";
 import { loadCollapsedSections, saveCollapsedSections } from "../lib/collapsed-sections";
@@ -149,6 +149,8 @@ import type { LoadFailureKind } from "../lib/user-error";
 import { errorText, loadFailureKind } from "../lib/user-error";
 
 const FALLBACK_COLOR = botColors[3];
+/** A row counts as on screen as soon as any of it shows. */
+const AVATAR_VIEWABILITY = { itemVisiblePercentThreshold: 1 };
 // A list narrower than this, beside an open chat, keeps names whole by leaving out the title tag.
 const TAGLESS_LIST_WIDTH = 360;
 const CompactRowsContext = createContext(false);
@@ -1182,18 +1184,25 @@ function Home({ embedded, onSelectSpace }: InboxPaneProps & { embedded: boolean 
     [loadBots, t],
   );
 
+  const [avatarViewport] = useState(createAvatarViewport);
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) =>
+    avatarViewport.update(viewableItems.map((token) => token.key)),
+  ).current;
   const renderItem = useCallback(
     ({ item }: { item: InboxItem }) =>
       item.type === "pinned" ? (
-        <PinnedTiles
-          chats={item.chats}
-          onOpenBot={openBot}
-          onOpenGroup={openGroup}
-          onLongPressBot={organizeBot}
-          onLongPressGroup={organizeGroup}
-          onBotAction={botAction}
-          onGroupAction={groupAction}
-        />
+        // The pinned tiles' avatars freeze with their row when it scrolls away.
+        <AvatarRow id={inboxItemKey(item)}>
+          <PinnedTiles
+            chats={item.chats}
+            onOpenBot={openBot}
+            onOpenGroup={openGroup}
+            onLongPressBot={organizeBot}
+            onLongPressGroup={organizeGroup}
+            onBotAction={botAction}
+            onGroupAction={groupAction}
+          />
+        </AvatarRow>
       ) : item.type === "heading" ? (
         item.space ? (
           <View style={styles.spaceHeading}>
@@ -1309,10 +1318,6 @@ function Home({ embedded, onSelectSpace }: InboxPaneProps & { embedded: boolean 
         <BotRow
           bot={item.bot}
           day={day}
-          depth={item.depth}
-          hasChildren={item.hasChildren}
-          collapsed={collapsed.has(item.bot.id)}
-          onToggleChildren={toggleCollapsed}
           onPress={openBot}
           onLongPress={!SWIPE_ROWS ? organizeBot : undefined}
           onAction={SWIPE_ROWS && item.bot.spaceId === me?.spaceId ? botAction : undefined}
@@ -1326,7 +1331,6 @@ function Home({ embedded, onSelectSpace }: InboxPaneProps & { embedded: boolean 
       botAction,
       botSections,
       chooseInboxSpace,
-      collapsed,
       confirmDeleteSpace,
       deleteSection,
       day,
@@ -1435,76 +1439,81 @@ function Home({ embedded, onSelectSpace }: InboxPaneProps & { embedded: boolean 
       <SelectedChatContext.Provider value={embedded ? selectedChatId : null}>
         <CompactRowsContext.Provider value={compactRows}>
           <View style={styles.listArea}>
-            <FlatList<InboxItem>
-              ref={listRef}
-              {...unreadJump.listProps}
-              style={{ flex: 1 }}
-              data={showLoadFailure ? [] : listData}
-              keyExtractor={inboxItemKey}
-              keyboardDismissMode="interactive"
-              keyboardShouldPersistTaps="handled"
-              indicatorStyle={appearance === "dark" ? "white" : "black"}
-              contentContainerStyle={[
-                styles.list,
-                { paddingLeft: columnInsets.left, paddingRight: columnInsets.right },
-              ]}
-              contentInsetAdjustmentBehavior="automatic"
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={() => {
-                    void refreshBots();
-                    void loadActivity();
-                  }}
-                  tintColor={native.secondaryLabel}
-                  colors={[tokens.mutedForeground]}
-                  progressBackgroundColor={tokens.muted}
-                />
-              }
-              ListHeaderComponent={
-                <>
-                  {inlineError ? <Text style={styles.error}>{inlineError}</Text> : null}
-                  {spaceRecoveryId ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={spaceBusy}
-                      onPress={() => void chooseInboxSpace(spaceRecoveryId)}
-                      style={styles.recoveryAction}
-                    >
-                      <Text style={styles.spaceTitle}>{t("Try again.")}</Text>
-                    </Pressable>
-                  ) : null}
-                  {activityMode && (activity.active.length > 0 || activity.recent.length > 0) ? (
-                    <ActivitySection activity={activity} bots={bots} />
-                  ) : null}
-                </>
-              }
-              ListEmptyComponent={
-                showLoadFailure && loadFailure ? (
-                  <HomeErrorState
-                    kind={loadFailure.kind}
-                    message={loadFailure.message}
-                    loading={inboxLoading && !refreshing}
-                    onRetry={() => void refreshBots()}
-                    onSignIn={() => void signInAgain()}
+            <AvatarViewportScope viewport={avatarViewport}>
+              <FlatList<InboxItem>
+                ref={listRef}
+                {...unreadJump.listProps}
+                style={{ flex: 1 }}
+                // Rows scrolled out of view freeze their avatars until they come back.
+                onViewableItemsChanged={onViewableItemsChanged}
+                viewabilityConfig={AVATAR_VIEWABILITY}
+                data={showLoadFailure ? [] : listData}
+                keyExtractor={inboxItemKey}
+                keyboardDismissMode="interactive"
+                keyboardShouldPersistTaps="handled"
+                indicatorStyle={appearance === "dark" ? "white" : "black"}
+                contentContainerStyle={[
+                  styles.list,
+                  { paddingLeft: columnInsets.left, paddingRight: columnInsets.right },
+                ]}
+                contentInsetAdjustmentBehavior="automatic"
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={() => {
+                      void refreshBots();
+                      void loadActivity();
+                    }}
+                    tintColor={native.secondaryLabel}
+                    colors={[tokens.mutedForeground]}
+                    progressBackgroundColor={tokens.muted}
                   />
-                ) : (
-                  <Text style={styles.empty}>{me ? t("Tap + to create a bot") : null}</Text>
-                )
-              }
-              ListFooterComponent={
-                <>
-                  {!showLoadFailure && inboxNeedsCreateHint(listData) ? (
-                    <Text style={styles.empty}>{t("Tap + to create a bot")}</Text>
-                  ) : null}
-                  <ArchivedChatsRow
-                    count={archivedCount}
-                    onPress={() => router.push("/archived-bots")}
-                  />
-                </>
-              }
-              renderItem={renderItem}
-            />
+                }
+                ListHeaderComponent={
+                  <>
+                    {inlineError ? <Text style={styles.error}>{inlineError}</Text> : null}
+                    {spaceRecoveryId ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={spaceBusy}
+                        onPress={() => void chooseInboxSpace(spaceRecoveryId)}
+                        style={styles.recoveryAction}
+                      >
+                        <Text style={styles.spaceTitle}>{t("Try again.")}</Text>
+                      </Pressable>
+                    ) : null}
+                    {activityMode && (activity.active.length > 0 || activity.recent.length > 0) ? (
+                      <ActivitySection activity={activity} bots={bots} />
+                    ) : null}
+                  </>
+                }
+                ListEmptyComponent={
+                  showLoadFailure && loadFailure ? (
+                    <HomeErrorState
+                      kind={loadFailure.kind}
+                      message={loadFailure.message}
+                      loading={inboxLoading && !refreshing}
+                      onRetry={() => void refreshBots()}
+                      onSignIn={() => void signInAgain()}
+                    />
+                  ) : (
+                    <Text style={styles.empty}>{me ? t("Tap + to create a bot") : null}</Text>
+                  )
+                }
+                ListFooterComponent={
+                  <>
+                    {!showLoadFailure && inboxNeedsCreateHint(listData) ? (
+                      <Text style={styles.empty}>{t("Tap + to create a bot")}</Text>
+                    ) : null}
+                    <ArchivedChatsRow
+                      count={archivedCount}
+                      onPress={() => router.push("/archived-bots")}
+                    />
+                  </>
+                }
+                renderItem={renderItem}
+              />
+            </AvatarViewportScope>
             {refreshing || showLoadFailure || inboxHasNoChats(listData) ? null : unreadJump.overlay}
           </View>
         </CompactRowsContext.Provider>
@@ -1611,7 +1620,12 @@ function ActivityRow({
       accessibilityLabel={`${title}, ${status}`}
       onPress={onPress}
       avatar={
-        <BotAvatar identity={run.botId} color={bot?.color ?? FALLBACK_COLOR} status={run.status} />
+        <BotAvatar
+          identity={run.botId}
+          color={bot?.color ?? FALLBACK_COLOR}
+          status={run.status}
+          motion="lazy"
+        />
       }
     />
   );
@@ -1626,13 +1640,8 @@ function ConversationRow({
   preview,
   time,
   avatar,
-  indicator,
   tag,
   unread,
-  depth = 0,
-  hasChildren = false,
-  collapsed = false,
-  onToggleChildren,
   onPress,
   onLongPress,
   actions = [],
@@ -1645,13 +1654,8 @@ function ConversationRow({
   preview: string;
   time: string;
   avatar: ReactNode;
-  indicator?: ReactNode;
   tag?: string | null;
   unread?: boolean;
-  depth?: number;
-  hasChildren?: boolean;
-  collapsed?: boolean;
-  onToggleChildren?: () => void;
   onPress: () => void;
   onLongPress?: () => void;
   actions?: InboxRowAction[];
@@ -1665,27 +1669,21 @@ function ConversationRow({
   const tagBelow = stacksAtTextScale(useWindowDimensions().fontScale);
   const openChatId = useContext(SelectedChatContext);
   const selected = chatId !== undefined && openChatId === chatId;
-  const toggleLabel = collapsed
-    ? t("Expand {name}", { name: title })
-    : t("Collapse {name}", { name: title });
-  const rowActions = [
-    ...(hasChildren ? [{ name: "toggleChildren", label: toggleLabel }] : []),
-    ...actions.map((action) => ({ name: action, label: t(INBOX_ROW_ACTIONS[action].label) })),
-  ];
+  const rowActions = actions.map((action) => ({
+    name: action,
+    label: t(INBOX_ROW_ACTIONS[action].label),
+  }));
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
-      // Screen readers treat the row as one element, so the chevron and swipe actions are offered
-      // as row actions.
-      accessibilityState={hasChildren ? { expanded: !collapsed } : undefined}
+      // Screen readers access swipe actions through the row.
       accessibilityActions={rowActions.length > 0 ? rowActions : undefined}
       onAccessibilityAction={(event) => {
         const name = event.nativeEvent.actionName;
         const action = actions.find((item) => item === name);
-        if (name === "toggleChildren") onToggleChildren?.();
-        else if (action) onAction?.(action);
+        if (action) onAction?.(action);
       }}
       android_ripple={androidRipple()}
       onPress={onPress}
@@ -1695,30 +1693,9 @@ function ConversationRow({
         compact ? styles.compactRow : null,
         selected ? styles.rowSelected : null,
         selected && Platform.OS === "android" && { overflow: "hidden" },
-        depth > 0
-          ? {
-              paddingInlineStart:
-                (compact ? COMPACT_INBOX_ROW.padding : INBOX_ROW.padding) + depth * 16,
-            }
-          : null,
         pressed && Platform.OS !== "android" && styles.rowPressed,
       ]}
     >
-      {hasChildren ? (
-        <Pressable
-          accessible={false}
-          importantForAccessibility="no"
-          hitSlop={8}
-          onPress={onToggleChildren}
-          style={styles.treeToggle}
-        >
-          <NativeSymbol
-            ios={collapsed ? "chevron.right" : "chevron.down"}
-            android={collapsed ? "chevron-forward" : "chevron-down"}
-            size={14}
-          />
-        </Pressable>
-      ) : null}
       {avatar}
       <View style={styles.rowBody}>
         <View style={styles.rowTop}>
@@ -1735,7 +1712,6 @@ function ConversationRow({
             ) : null}
           </View>
           <View style={styles.rowMeta}>
-            {indicator}
             {time ? <Text style={styles.time}>{time}</Text> : null}
             {unread ? <View accessibilityElementsHidden style={styles.unreadDot} /> : null}
           </View>
@@ -1788,8 +1764,6 @@ function HeaderButton({
 function ArchivedChatsRow({ count, onPress }: { count: number; onPress: () => void }) {
   const styles = useThemedStyles(createHomeStyles);
   const { t } = useI18n();
-  const compact = useContext(CompactRowsContext);
-  const row = compact ? COMPACT_INBOX_ROW : INBOX_ROW;
   if (count < 1) return null;
   return (
     <Pressable
@@ -1797,9 +1771,9 @@ function ArchivedChatsRow({ count, onPress }: { count: number; onPress: () => vo
       accessibilityLabel={`${t("Archived")}, ${count}`}
       onPress={onPress}
       style={({ pressed }) => [
+        // Laid out like a section header, so it lines up with them whatever sits above it.
         styles.sectionToggle,
         styles.archivedRow,
-        { paddingInlineStart: row.padding + INBOX_ROW.avatarSize + row.gap },
         pressed && styles.rowPressed,
       ]}
     >
@@ -1905,6 +1879,7 @@ const PinnedTiles = memo(function PinnedTiles({
                 size={avatarSize}
                 status={chat.bot.status}
                 muted={chat.bot.notifyOnFinish === false}
+                motion="lazy"
               />
             ) : (
               <GroupAvatar members={chat.group.members} size={avatarSize} />
@@ -1936,10 +1911,6 @@ type RowMenuProps = {
 const BotRow = memo(function BotRow({
   bot,
   day,
-  depth = 0,
-  hasChildren = false,
-  collapsed = false,
-  onToggleChildren,
   onPress,
   onLongPress,
   onAction,
@@ -1949,10 +1920,6 @@ const BotRow = memo(function BotRow({
 }: {
   bot: MobileBot | SpaceBot;
   day: number;
-  depth?: number;
-  hasChildren?: boolean;
-  collapsed?: boolean;
-  onToggleChildren?: (botId: string) => void;
   onPress: (bot: MobileBot | SpaceBot) => void;
   onLongPress?: (bot: MobileBot | SpaceBot) => void;
   onAction?: (action: InboxRowAction, bot: MobileBot | SpaceBot) => void;
@@ -1962,10 +1929,6 @@ const BotRow = memo(function BotRow({
   const time = bot.updatedAt ? formatThreadTime(bot.updatedAt, new Date(day)) : "";
   const tag = botTag(bot.title, bot.name);
   const working = isRunWorking(bot.status);
-  // Only flat avatars carry a usable color; image avatars fall back to the muted dot.
-  const presentation = mobileBotAvatarPresentation(bot.color || FALLBACK_COLOR);
-  const tint =
-    presentation.kind === "shape" || presentation.kind === "color" ? presentation.color : undefined;
   // Spelled out because an explicit label replaces the one built from the row's children.
   const label = [
     bot.name,
@@ -1987,10 +1950,6 @@ const BotRow = memo(function BotRow({
       time={time}
       tag={tag}
       unread={bot.unread}
-      depth={depth}
-      hasChildren={hasChildren}
-      collapsed={collapsed}
-      onToggleChildren={onToggleChildren ? () => onToggleChildren(bot.id) : undefined}
       accessibilityLabel={label}
       accessibilityHint={
         onLongPress || onAction ? t("Long press to pin, move, or silence notifications") : undefined
@@ -1999,15 +1958,17 @@ const BotRow = memo(function BotRow({
       onLongPress={onLongPress ? () => onLongPress(bot) : undefined}
       actions={onAction ? inboxRowActionList(bot) : undefined}
       onAction={runAction}
-      indicator={working ? <WorkingIndicator compact tint={tint} /> : null}
       avatar={
-        <BotAvatar
-          color={bot.color || FALLBACK_COLOR}
-          identity={bot.id}
-          size={INBOX_ROW.avatarSize}
-          status={bot.status}
-          muted={bot.notifyOnFinish === false}
-        />
+        <AvatarRow id={bot.id}>
+          <BotAvatar
+            color={bot.color || FALLBACK_COLOR}
+            identity={bot.id}
+            size={INBOX_ROW.avatarSize}
+            status={bot.status}
+            muted={bot.notifyOnFinish === false}
+            motion="lazy"
+          />
+        </AvatarRow>
       }
     />
   );
@@ -2217,13 +2178,6 @@ function createHomeStyles() {
     compactRow: {
       paddingHorizontal: COMPACT_INBOX_ROW.padding,
       gap: COMPACT_INBOX_ROW.gap,
-    },
-    treeToggle: {
-      width: 20,
-      height: 20,
-      alignItems: "center",
-      justifyContent: "center",
-      marginRight: -4,
     },
     rowPressed: {
       opacity: 0.55,

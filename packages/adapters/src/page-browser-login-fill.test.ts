@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
+import { resolveRequestSecretDestination } from "./bot-secrets.js";
 
 /** The live page helper's isolated-world script, executed here rather than reimplemented. */
 function installPageHelper(url: string, html: string) {
@@ -89,6 +90,28 @@ describe("live page helper saved-login fill", () => {
       );
     }
     expect(domWindow.document.body.textContent).not.toContain("leaked");
+  });
+
+  it("fills a login saved from a page URL only on that page's exact site", () => {
+    const origin = resolveRequestSecretDestination({
+      label: "Sign in",
+      purpose: "password",
+      credential: {
+        name: "site_login",
+        origin: "https://www.example.test/some/login/page?x=1",
+        auth: { type: "login" },
+      },
+    }).destination?.origin;
+    expect(origin).toBe("https://www.example.test");
+    const other = installPageHelper("https://www.example.test/other", html);
+    other.browser.fill(refFor("Email", other.browser.snapshot().elements), "fake-user", origin);
+    expect(fieldValue(other.domWindow, "Email")).toBe("fake-user");
+    for (const url of ["https://example.test/login", "https://www.example.test.evil.test/login"]) {
+      const { domWindow, browser } = installPageHelper(url, html);
+      const email = refFor("Email", browser.snapshot().elements);
+      expect(() => browser.fill(email, "fake-user", origin)).toThrow(/not on the site/);
+      expect(fieldValue(domWindow, "Email")).toBe("");
+    }
   });
 
   it("refuses a private-LAN HTTP origin in the same fill, even when the page matches", () => {
