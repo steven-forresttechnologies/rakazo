@@ -34,7 +34,11 @@ import {
 } from "./computer-workspace.js";
 import { resolveAgentHomePath } from "./home.js";
 import { ObjectAgentHomeStore } from "./home-object-store.js";
-import { isSandboxDamagedError, isSandboxGoneError } from "./sandbox-errors.js";
+import {
+  isSandboxDamagedError,
+  isSandboxGoneError,
+  isSandboxUnsafeStopError,
+} from "./sandbox-errors.js";
 
 type ComputerUpdateProgress = (
   stage: Exclude<ComputerUpdate["stage"], "preparing">,
@@ -168,6 +172,8 @@ export async function provisionComputer(
   const started = performance.now();
   const log = getLogger().child({ "computer.id": computerId, "run.id": context.runId });
   let existing = await deps.prisma.computer.findUniqueOrThrow({ where: { id: computerId } });
+  if (existing.state === "quarantined")
+    throw new Error("Computer requires recovery after an unconfirmed stop");
   if (existing.maintenanceId && existing.maintenanceId !== context.operationId)
     throw new ComputerBusyError();
   if (existing.controlLeaseId && !hasActiveComputerControl(existing)) {
@@ -470,6 +476,7 @@ export async function provisionComputer(
       provisioned && (!reconnecting || provisioned.fresh === true)
         ? await rollbackProvisionedComputer(deps.sandbox, provisioned, context, error)
         : undefined;
+    const unsafeStop = isSandboxUnsafeStopError(error) || isSandboxUnsafeStopError(rollbackError);
     try {
       await deps.prisma.computer.updateMany({
         where: {
@@ -480,8 +487,15 @@ export async function provisionComputer(
           maintenanceId: existing.maintenanceId ?? null,
         },
         data: {
-          state: reconnecting ? "running" : "error",
-          ...(!reconnecting && rollbackError && provisioned
+          state:
+            (reconnecting || rollbackError) && unsafeStop
+              ? "quarantined"
+              : reconnecting
+                ? "running"
+                : "error",
+          ...((!reconnecting || (unsafeStop && provisioned?.fresh === true)) &&
+          rollbackError &&
+          provisioned
             ? { providerRef: provisioned.providerRef, kind: provisioned.kind }
             : {}),
         },
@@ -818,6 +832,7 @@ export function computerSupportsTerminal(kind: string): boolean {
   return (
     kind === "docker" ||
     kind === "e2b" ||
+    kind === "novita" ||
     kind === "daytona" ||
     kind === "boat" ||
     kind === "kubernetes" ||
@@ -1097,7 +1112,7 @@ export async function replaceComputer(
           updatedAt: claimStamp,
           maintenanceId: existing.maintenanceId ?? null,
         },
-        data: { state: "error" },
+        data: { state: previousState === "quarantined" ? "quarantined" : "error" },
       })
       .catch(() => undefined);
     throw error;
