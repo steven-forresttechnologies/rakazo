@@ -35,12 +35,13 @@ export const DEFAULT_DESKTOP_ENV: DesktopEnvironment = {
   preservePrimaryDisplay: true,
 };
 function gatewayHost(host = "127.0.0.1") {
-  if (host !== "localhost" && !isIPv4(host)) throw new Error("invalid screen gateway bind host");
+  if (host !== "localhost" && host !== "::" && !isIPv4(host))
+    throw new Error("invalid screen gateway bind host");
   return host;
 }
 
 function gatewayProbeHost(host: string) {
-  return host === "0.0.0.0" ? "127.0.0.1" : host;
+  return host === "0.0.0.0" ? "127.0.0.1" : host === "::" ? "::1" : host;
 }
 
 export function screenPorts(index: number, env = DEFAULT_DESKTOP_ENV) {
@@ -215,7 +216,7 @@ function browserLauncherCommand(
     '  if [ -n "$_kept" ]; then export LD_PRELOAD="$_kept"; else unset LD_PRELOAD; fi',
     "  unset _kept _rest _entry",
     "fi",
-    `exec "$browser" --test-type --no-sandbox --disable-dev-shm-usage --disable-gpu --enable-unsafe-swiftshader --no-first-run --no-default-browser-check --disable-session-crashed-bubble --hide-crash-restore-bubble --password-store=basic --start-maximized --remote-debugging-address=127.0.0.1 --remote-debugging-port=${layout.debugPort} --user-data-dir=${shellQuote(browserProfilePathForScreen(screenId, env))} "$@"`,
+    `exec "$browser" --test-type --no-sandbox --disable-dev-shm-usage --disable-gpu --enable-unsafe-swiftshader --no-first-run --no-default-browser-check --disable-session-crashed-bubble --hide-crash-restore-bubble --password-store=basic --restore-last-session --start-maximized --remote-debugging-address=127.0.0.1 --remote-debugging-port=${layout.debugPort} --user-data-dir=${shellQuote(browserProfilePathForScreen(screenId, env))} "$@"`,
   ].join("\n");
 }
 
@@ -805,13 +806,17 @@ export function releaseDesktopCommand(
   ].join("\n");
 }
 
-/** Guard a control transition with the persisted allocation and execution fence. */
+/**
+ * Guard a control transition with the persisted allocation and execution fence.
+ * Revoking without a token ends any control on the display but keeps its slot, fence,
+ * view, and browser for the bot's next run.
+ */
 export function desktopControlCommand(
   screenId: string,
   leaseId: string | undefined,
   env: DesktopEnvironment,
   interactive: boolean,
-  token: string,
+  token?: string,
 ) {
   return [
     ...registryLockCommand(screenId),

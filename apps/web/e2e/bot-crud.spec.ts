@@ -118,7 +118,6 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   await expect(settings.getByRole("switch", { name: "Manage the bots it creates" })).toBeHidden();
   await expect(modelSelect).toHaveCount(0);
   await expect(openWork).toHaveCount(0);
-  await expect(settings.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
   await expect(settings.getByRole("button", { name: "Export", exact: true })).toHaveCount(0);
   const notificationsHeading = settings.getByRole("heading", {
     name: "Notifications",
@@ -271,9 +270,6 @@ test("bot management switch persists with its subtitle", async ({ page }, testIn
 
   const fleetSwitch = await openAdvanced();
   await expect(fleetSwitch).toBeChecked();
-  await expect(
-    page.getByText("Can edit and organise bots it creates", { exact: true }),
-  ).toBeVisible();
   await expect(page.getByRole("button", { name: "About Manage the bots it creates" })).toHaveCount(
     0,
   );

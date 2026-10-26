@@ -3,11 +3,19 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { ChatMarkdown } from "@rakazo/chat-ui/web";
 import type { ThreadMessage } from "@rakazo/contracts";
 import { BOT_INSTRUCTIONS_MAX_LENGTH, commandVariableName } from "@rakazo/contracts";
-import { isApprovalAskBlock, isSecretAskBlock, selectedAskActionLabel } from "@rakazo/core";
+import {
+  isApprovalAskBlock,
+  isSecretAskBlock,
+  resolveAskChoice,
+  selectedAskActionLabel,
+} from "@rakazo/core";
 import { Button, Input, Textarea } from "@rakazo/ui-web";
-import { useState } from "react";
+import { Check } from "lucide-react";
+import { useEffect, useState } from "react";
 import { rpc } from "../lib/rpc";
 import { errorText } from "../lib/user-error";
+import { BuiCard } from "./ai/primitives";
+import { OptionRow, optionLetter } from "./OptionRow";
 
 export type AskBlock = Extract<ThreadMessage["blocks"][number], { kind: "ask" }>;
 
@@ -21,7 +29,7 @@ function formatAnsweredState(
 ): string {
   if (secret) return dismissed ? t`Dismissed` : t`Saved`;
   if (!answer) return t`Answered`;
-  if (!approval) return t`Answered: ${selectedAskActionLabel(answer, actions)}`;
+  if (!approval) return answer === "approved" ? t`Sent` : selectedAskActionLabel(answer, actions);
   if (outcome === "created") return t`Created`;
   if (outcome === "cancelled") return t`Cancelled`;
   if (answer === "allow") return t`Allowed once`;
@@ -71,6 +79,8 @@ export function AskCard({
   const [acceptedAnswer, setAcceptedAnswer] = useState<string>();
   const [undone, setUndone] = useState(false);
   const [username, setUsername] = useState("");
+  const [secretField, setSecretField] = useState<HTMLInputElement | null>(null);
+  const [pastedLines, setPastedLines] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const submitting = pendingAction !== null;
@@ -85,11 +95,56 @@ export function AskCard({
       )
     : askActions;
   const secretInput = isSecretAskBlock(block);
+  const optionQuestion =
+    !approvalActions && !block.instructionUpdate && !secretInput && Boolean(askActions?.length);
+  const chosenOption =
+    answered && displayedAnswer ? resolveAskChoice(displayedAnswer, askActions) : undefined;
+  // A reply typed instead of picked is shown in the user's words, so the card reads as answered.
+  const typedAnswer =
+    answered &&
+    !approvalActions &&
+    !secretInput &&
+    !block.instructionUpdate &&
+    !chosenOption &&
+    displayedAnswer !== "approved"
+      ? displayedAnswer
+      : undefined;
+  const answerQuote = typedAnswer ? (
+    <blockquote
+      data-testid="ask-answer"
+      className="mt-3 whitespace-pre-wrap break-words border-s-2 border-border ps-3 text-[15px] leading-[1.5] text-muted-foreground"
+    >
+      {typedAnswer}
+    </blockquote>
+  ) : null;
   // A login or credential is saved for the run's user, so only they can fill one in; others see
   // the card without fields or buttons.
   const ownerOnly = secretInput && Boolean(block.credential) && !canDismiss;
   const loginInput = secretInput && block.credential?.auth.type === "login";
   const secretLabel = loginInput ? t`Password` : secretFieldLabel(block.purpose);
+  const commandInput = secretInput && block.credential?.auth.type === "command";
+
+  // A password field can't hold line breaks, so it would flatten a multi-line command variable
+  // such as an SSH private key. That text is kept as is and the field turns read-only, so what
+  // is saved is exactly what was pasted; Clear makes it editable again.
+  useEffect(() => {
+    if (!commandInput || !secretField) return;
+    const field = secretField;
+    const keepLineBreaks = (event: InputEvent) => {
+      const text = (event.data ?? event.dataTransfer?.getData("text/plain") ?? "").replace(
+        /\r\n?/g,
+        "\n",
+      );
+      if (field.readOnly || !event.cancelable || !text.trim().includes("\n")) return;
+      event.preventDefault();
+      const start = field.selectionStart ?? field.value.length;
+      const end = field.selectionEnd ?? start;
+      setAnswer(field.value.slice(0, start) + text + field.value.slice(end));
+      setPastedLines(true);
+    };
+    field.addEventListener("beforeinput", keepLineBreaks);
+    return () => field.removeEventListener("beforeinput", keepLineBreaks);
+  }, [commandInput, secretField]);
 
   async function submitAnswer(value: string) {
     if (submitting) return;
@@ -102,6 +157,7 @@ export function AskCard({
     if (secretInput) {
       setAnswer("");
       setUsername("");
+      setPastedLines(false);
     }
     try {
       await onAnswer(submitValue, submitUsername);
@@ -124,6 +180,7 @@ export function AskCard({
     setError(null);
     setAnswer("");
     setUsername("");
+    setPastedLines(false);
     try {
       await onDismiss();
       setDismissed(true);
@@ -136,9 +193,9 @@ export function AskCard({
 
   if (block.instructionUpdate?.undoVersionId)
     return (
-      <div className="rounded-2xl border border-border bg-card px-5 py-4">
+      <BuiCard className="px-5 py-4">
         <div className="flex items-center gap-2 text-sm">
-          <Trans>Instructions updated</Trans> ·{" "}
+          <Trans>Instructions updated</Trans>
           <Button
             variant="link"
             disabled={undone || submitting}
@@ -164,11 +221,11 @@ export function AskCard({
           </Button>
           {error ? <span className="text-destructive">{error}</span> : null}
         </div>
-      </div>
+      </BuiCard>
     );
 
   return (
-    <div
+    <BuiCard
       data-testid={
         secretInput
           ? "secret-ask-card"
@@ -176,7 +233,7 @@ export function AskCard({
             ? "instruction-approval-card"
             : undefined
       }
-      className={`w-full min-w-0 ${secretInput ? "" : "max-w-xl "}rounded-2xl border border-border bg-card px-5 py-4`}
+      className="w-full min-w-0 max-w-xl px-5 py-4"
     >
       <div className="text-[15.5px] leading-[1.5] text-foreground">
         {block.instructionUpdate ? (
@@ -190,9 +247,14 @@ export function AskCard({
           data-testid="secret-ask-destination"
           className="mt-2 break-all text-[13px] text-muted-foreground"
         >
-          {block.credential.auth.type === "command"
-            ? `${t`Command variable`} · $${commandVariableName(block.credential.name)}`
-            : block.credential.origin}
+          {block.credential.auth.type === "command" ? (
+            <span className="flex flex-wrap gap-x-2">
+              <span>{t`Command variable`}</span>
+              <span>${commandVariableName(block.credential.name)}</span>
+            </span>
+          ) : (
+            block.credential.origin
+          )}
         </div>
       ) : null}
       {block.detail && !secretInput ? (
@@ -227,10 +289,32 @@ export function AskCard({
             <Trans>Cancel</Trans>
           </Button>
         </form>
+      ) : optionQuestion ? (
+        // Options stay in place once answered: the chosen one is marked, the rest dim.
+        <div className="mt-2.5 space-y-0.5">
+          {askActions?.map((action, index) => (
+            <OptionRow
+              key={action.id}
+              letter={optionLetter(index)}
+              selected={chosenOption?.id === action.id}
+              disabled={answered || !canAnswer || submitting}
+              onClick={() => void submitAnswer(action.id)}
+            >
+              {pendingAction === action.id ? <Trans>Sending…</Trans> : action.label}
+            </OptionRow>
+          ))}
+          {answerQuote}
+        </div>
+      ) : typedAnswer ? (
+        answerQuote
       ) : answered ? (
-        <div
-          className={`mt-3.5 text-[13.5px] font-medium ${displayedAnswer === "deny" || displayedDismissed ? "text-muted-foreground" : "text-success"}`}
-        >
+        <div className="mt-3.5 flex items-center gap-1.5 text-[13.5px] font-medium text-muted-foreground">
+          {displayedAnswer === "deny" ||
+          displayedDismissed ||
+          approvalActions?.find((action) => action.id === displayedAnswer)?.outcome ===
+            "cancelled" ? null : (
+            <Check aria-hidden className="size-4" />
+          )}
           {block.instructionUpdate
             ? displayedAnswer === "deny"
               ? t`Dismissed`
@@ -248,13 +332,14 @@ export function AskCard({
         <div className="mt-3.5 text-[13.5px] font-medium text-muted-foreground">
           <Trans>No longer active</Trans>
         </div>
-      ) : ownerOnly ? null : askActions?.length ? (
-        <div className={approvalActions ? "mt-3.5 flex flex-wrap gap-2" : "mt-3.5 space-y-1.5"}>
-          {displayActions?.map((action) => (
+      ) : ownerOnly ? null : displayActions?.length ? (
+        <div className="mt-3.5 flex flex-wrap gap-2">
+          {displayActions.map((action) => (
             <Button
               key={action.id}
-              variant={approvalActions && action.id === "allow" ? "default" : "outline"}
-              className={`h-auto min-w-0 whitespace-normal px-3.5 py-3 text-start font-normal ${approvalActions ? "" : "w-full justify-start border-input bg-secondary"}`}
+              variant={action.id === "allow" ? "default" : "outline"}
+              // Wraps long site names like the other cards' buttons.
+              className="h-auto min-h-8 min-w-0 whitespace-normal py-1 text-start"
               disabled={submitting}
               onClick={() =>
                 action.id === "edit" && block.instructionUpdate
@@ -264,20 +349,16 @@ export function AskCard({
             >
               {pendingAction === action.id ? (
                 <Trans>Sending…</Trans>
-              ) : action.id === "edit" && block.instructionUpdate ? (
+              ) : action.id === "edit" ? (
                 action.label
-              ) : approvalActions ? (
-                block.instructionUpdate ? (
-                  action.id === "allow" ? (
-                    t`Apply`
-                  ) : (
-                    t`Dismiss`
-                  )
+              ) : block.instructionUpdate ? (
+                action.id === "allow" ? (
+                  t`Apply`
                 ) : (
-                  approvalActionLabel(action.id, action.label, action.outcome, block.site)
+                  t`Dismiss`
                 )
               ) : (
-                action.label
+                approvalActionLabel(action.id, action.label, action.outcome, block.site)
               )}
             </Button>
           ))}
@@ -303,20 +384,36 @@ export function AskCard({
             />
           ) : null}
           <Input
+            ref={setSecretField}
             className="w-full"
             aria-label={secretLabel}
             type="password"
             autoComplete="off"
             spellCheck={false}
             disabled={submitting}
-            value={answer}
+            readOnly={pastedLines}
+            value={pastedLines ? answer.replaceAll("\n", " ") : answer}
             onChange={(event) => setAnswer(event.target.value)}
             placeholder={secretLabel}
           />
+          {pastedLines ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="self-start"
+              disabled={submitting}
+              onClick={() => {
+                setAnswer("");
+                setPastedLines(false);
+                secretField?.focus();
+              }}
+            >
+              <Trans>Clear</Trans>
+            </Button>
+          ) : null}
           <div className="flex gap-2">
             <Button
               type="submit"
-              className="h-auto min-w-0 flex-1 whitespace-normal"
               disabled={answer.length === 0 || (loginInput && !username.trim()) || submitting}
             >
               {pendingAction === "submit" ? <Trans>Saving…</Trans> : <Trans>Save</Trans>}
@@ -325,7 +422,6 @@ export function AskCard({
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-w-0 flex-1 whitespace-normal"
                 disabled={submitting}
                 onClick={() => void dismissSecret()}
               >
@@ -375,6 +471,6 @@ export function AskCard({
         </div>
       )}
       {error ? <p className="mt-3 text-[13px] text-destructive">{error}</p> : null}
-    </div>
+    </BuiCard>
   );
 }

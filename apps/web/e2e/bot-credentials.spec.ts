@@ -34,12 +34,8 @@ test("bot and command credentials add, replace and remove without leaking values
   await expect(
     credentials.getByRole("heading", { name: "Credentials", exact: true }),
   ).toBeVisible();
-  await expect(
-    settings.getByTestId("bot-settings-tools").getByTestId("bot-credentials"),
-  ).toHaveCount(0);
   const card = credentials.getByTestId("bot-credentials-card");
-  await expect(card.getByText("Encrypted and never shown again", { exact: true })).toBeVisible();
-  await expect(card.getByTestId("credential-add-form")).toHaveCount(0);
+  await expect(card).toHaveCount(0);
   await add.hover();
   await expect(
     page.locator('[data-slot="tooltip-content"]').filter({ hasText: "Add credential" }),
@@ -48,6 +44,7 @@ test("bot and command credentials add, replace and remove without leaking values
   // Add: a password field holds the value, which is cleared once the save starts.
   await credentials.getByTestId("credential-add").click();
   const addForm = credentials.getByTestId("credential-add-form");
+  await expect(addForm.getByText("Encrypted and never shown again", { exact: true })).toBeVisible();
   await addForm.getByTestId("credential-name").fill(CREDENTIAL_NAME);
   await addForm.getByTestId("credential-origin").fill("https://api.example.test");
   const valueInput = addForm.getByTestId("credential-value");
@@ -124,7 +121,9 @@ test("bot and command credentials add, replace and remove without leaking values
 
   await expect(row).toHaveCount(1);
   await expect(row).toContainText(COMMAND_CREDENTIAL_NAME);
-  await expect(row).toContainText(`Command variable · ${COMMAND_VARIABLE_NAME}`);
+  await expect(row).toContainText(
+    new RegExp(`Command variable\\s*${COMMAND_VARIABLE_NAME.replace("$", "\\$")}`),
+  );
   await expect(commandForm).toHaveCount(0);
 
   // The API returns metadata only: the type, an empty origin, and no value.

@@ -1,5 +1,3 @@
-import { lstat, realpath, rm, unlink } from "node:fs/promises";
-import path from "node:path";
 import type {
   AdapterContext,
   AgentHomeStore,
@@ -16,28 +14,29 @@ import {
   GROUP_MEMBER_MIN,
 } from "@rakazo/contracts";
 import { ACTIVE_RUN_STATUSES } from "@rakazo/core";
+import type { Prisma, PrismaClient } from "@rakazo/db";
 import {
   cancelRunsInTransaction,
-  clearRunTurnCheckpoints,
+  clearEndedRunState,
   computerScopeKey,
   createRepos,
   createThreadMessageInTransaction,
   expireComputerExecutionLeases,
-  type Prisma,
-  type PrismaClient,
+  legacyTeamHomeKey,
+  recordComputerRunEnd,
   withTransactionRetry,
 } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 import { BrowserStoppedReleaseError } from "./computer-screens.js";
 import { toComputerRef } from "./computer-support.js";
 import {
-  checkpointAndRecordComputerWorkspace,
+  checkpointAndStopComputer,
   isTeamBotFolderName,
   removeComputerWorkspaceDirectories,
   teamBrowserProfileName,
   withCleanupDeadline,
 } from "./computer-workspace.js";
-import { resolveAgentHomePath } from "./home.js";
+import { removeAgentHome, removeAgentHomeFolders } from "./home.js";
 import { removePiBotSessions } from "./pi-session.js";
 
 export function confirmSpawnedBotName(confirmName: string, botName: string) {
@@ -214,6 +213,9 @@ type BotLifecycleDeps = {
   jobs: JobPublisher;
   dataDir?: string;
   artifacts?: ArtifactStore;
+  messagingInstallations?: {
+    removeForBot(bot: { id: string; spaceId: string; userId: string }): Promise<void>;
+  };
 };
 
 type LifecycleBot = {
@@ -323,7 +325,7 @@ export async function archiveBot(
       where: { id: { in: runIds } },
       data: { status: "cancelled", completedAt: now },
     });
-    await clearRunTurnCheckpoints(tx, runIds);
+    await clearEndedRunState(tx, runIds);
     await tx.task.updateMany({
       where: { runs: { some: { id: { in: runIds } } } },
       data: { status: "cancelled" },
@@ -360,8 +362,7 @@ export async function archiveBot(
     : null;
   if (currentDedicated?.providerRef && currentDedicated.state === "running") {
     const ref = toComputerRef(currentDedicated);
-    await checkpointAndRecordComputerWorkspace(deps, currentDedicated, ref, context);
-    await deps.sandbox.stop(ref, context);
+    await checkpointAndStopComputer(deps, currentDedicated, ref, context);
     await deps.prisma.computer.updateMany({
       where: {
         id: currentDedicated.id,
@@ -370,6 +371,7 @@ export async function archiveBot(
       },
       data: { state: "stopped" },
     });
+    await recordComputerRunEnd(deps.prisma, currentDedicated, "stopped");
   }
 }
 
@@ -377,8 +379,16 @@ export async function destroyBot(
   deps: BotLifecycleDeps,
   bot: LifecycleBot,
   context: AdapterContext,
-  options: { deleteMemories: boolean },
+  options: {
+    deleteMemories: boolean;
+    /** Runs in the deletion transaction once the bot row is locked; may set `deleteMemories`. */
+    within?: (tx: Prisma.TransactionClient) => Promise<{ deleteMemories: boolean } | undefined>;
+    /** Fail before deleting anything when the provider cannot confirm the sandbox is gone,
+     * so the computer row keeps its handle for a retry. */
+    strictTeardown?: boolean;
+  },
 ) {
+  await deps.messagingInstallations?.removeForBot(bot);
   const [dedicated, activeRuns, routines] = await Promise.all([
     deps.prisma.computer.findUnique({
       where: {
@@ -401,7 +411,7 @@ export async function destroyBot(
     where: { id: { in: runIds } },
     data: { status: "cancelled", completedAt: new Date() },
   });
-  await clearRunTurnCheckpoints(deps.prisma, runIds);
+  await clearEndedRunState(deps.prisma, runIds);
   await Promise.allSettled([
     ...activeRuns.map((run) => deps.jobs.cancel(runJobKey(run.id))),
     ...routines.map((routine) => deps.jobs.cancel(routineJobKey(routine.id))),
@@ -410,7 +420,8 @@ export async function destroyBot(
     cancelRunWork: true,
   });
   if (dedicated?.providerRef) {
-    await deps.sandbox.destroy(toComputerRef(dedicated), context).catch(() => undefined);
+    const destroyed = deps.sandbox.destroy(toComputerRef(dedicated), context);
+    await (options.strictTeardown ? destroyed : destroyed.catch(() => undefined));
   }
   // Keep the bot deletion transaction from committing if raw transcript cleanup fails.
   await removePiBotSessions(deps.dataDir, bot.userId, bot.id);
@@ -422,7 +433,11 @@ export async function destroyBot(
         WHERE id = ${bot.id} AND "spaceId" = ${bot.spaceId}
         FOR UPDATE
       `;
+      // A concurrent removal of the same bot committed while this one waited for the lock;
+      // it owns the deletion and the cleanup that follows.
+      if (locked.length === 0) return null;
       const webhookSecretId = locked[0]?.webhookSecretId ?? bot.webhookSecretId ?? null;
+      const deleteMemories = (await options.within?.(tx))?.deleteMemories ?? options.deleteMemories;
       const botArtifacts = await tx.artifact.findMany({
         where: { botId: bot.id, groupId: null, spaceId: bot.spaceId },
         select: { storageKey: true },
@@ -439,7 +454,7 @@ export async function destroyBot(
         },
         data: releasedComputerLease(),
       });
-      if (!options.deleteMemories) {
+      if (!deleteMemories) {
         const directory = archivedMemoryDirectory(bot.name, bot.id);
         await tx.$executeRaw`
           UPDATE "memory_documents"
@@ -456,7 +471,7 @@ export async function destroyBot(
           spaceId: bot.spaceId,
           name: bot.name,
           deletedByUserId: context.userId,
-          memoriesPreserved: !options.deleteMemories,
+          memoriesPreserved: !deleteMemories,
         },
       });
       await tx.bot.delete({ where: { id: bot.id } });
@@ -475,6 +490,7 @@ export async function destroyBot(
       };
     }),
   );
+  if (!deletion) return;
   await Promise.allSettled(
     deletion.cancelledGroupRuns.map((run) => deps.jobs.cancel(runJobKey(run.id))),
   );
@@ -499,10 +515,8 @@ export async function destroyBot(
     }),
   );
   if (dedicated) {
-    await rm(resolveAgentHomePath(deps.home, dedicated.homeKey, deps.dataDir ?? "./data"), {
-      recursive: true,
-      force: true,
-    }).catch(() => undefined);
+    await recordComputerRunEnd(deps.prisma, { id: dedicated.id }, "deleted");
+    await removeAgentHome(deps.home, dedicated.homeKey, deps.dataDir).catch(() => undefined);
   }
   await removeTeamBrowserProfile(deps, bot.id, sharedComputer, context);
   await removeTeamBotWorkspace(deps, bot, context).catch((error) => {
@@ -554,6 +568,8 @@ async function detachBotFromGroups(tx: Prisma.TransactionClient, botId: string) 
         select: {
           id: true,
           taskId: true,
+          userId: true,
+          spaceId: true,
           botId: true,
           bot: {
             select: {
@@ -672,7 +688,16 @@ async function sharedTeamComputer(
   return computer;
 }
 
-const REMOTE_TEAM_SANDBOX_KINDS = new Set(["e2b", "daytona", "boat", "createos"]);
+const REMOTE_TEAM_SANDBOX_KINDS = new Set(["e2b", "daytona", "boat", "createos", "kubernetes"]);
+
+/**
+ * Whether only the server writes this computer's stored home. A Kubernetes computer that
+ * mounts the server's home directory writes it itself, like a Docker computer.
+ */
+function serverOwnsTeamHome(sandbox: SandboxProvider, kind: string) {
+  if (!REMOTE_TEAM_SANDBOX_KINDS.has(kind)) return false;
+  return !(kind === "kubernetes" && sandbox.describe().capabilities.persistentHome);
+}
 // The bot is already deleted; whatever this misses is removed when the computer next boots.
 const LIVE_CLEANUP_BUDGET_MS = 10_000;
 
@@ -707,9 +732,14 @@ async function removeTeamBrowserProfile(
       getLogger().error("team browser profile cleanup", error);
     });
   }
-  if (!REMOTE_TEAM_SANDBOX_KINDS.has(computer.kind)) return;
-  const homeDir = resolveAgentHomePath(deps.home, computer.homeKey, deps.dataDir ?? "./data");
-  await removeContainedDirectory(homeDir, ".browser-profiles", name).catch((error) => {
+  if (!serverOwnsTeamHome(deps.sandbox, computer.kind)) return;
+  await removeAgentHomeFolders(
+    deps.home,
+    computer.homeKey,
+    ".browser-profiles",
+    [name],
+    deps.dataDir,
+  ).catch((error) => {
     getLogger().error("team browser profile cleanup", error);
   });
 }
@@ -757,71 +787,86 @@ async function removeTeamBotWorkspace(
 ) {
   if (!isTeamBotFolderName(bot.id)) return;
   // Look the owner's Team Computer up by scope: a bot moved to its own computer can still have
-  // a folder there. Any other team computer in the space drops it on boot (botDeletion).
-  const computer = await deps.prisma.computer.findUnique({
-    where: {
-      scopeKey: computerScopeKey({ mode: "team", spaceId: bot.spaceId, userId: bot.userId }),
-    },
+  // a folder there. The space's Team Computer from before each person got their own still holds
+  // the folders and browser profiles of every member's bots from then. Any other team computer
+  // in the space drops them on boot (botDeletion).
+  const [own, legacy] = await Promise.all([
+    deps.prisma.computer.findUnique({
+      where: {
+        scopeKey: computerScopeKey({ mode: "team", spaceId: bot.spaceId, userId: bot.userId }),
+      },
+    }),
+    deps.prisma.computer.findUnique({ where: { homeKey: legacyTeamHomeKey(bot.spaceId) } }),
+  ]);
+  const profile = teamBrowserProfileName(bot.id);
+  if (own) await removeBotFolders(deps, bot.id, own, [["bots", bot.id]], context);
+  if (legacy && legacy.id !== own?.id && legacy.scope === "team") {
+    await removeBotFolders(
+      deps,
+      bot.id,
+      legacy,
+      [["bots", bot.id], ...(profile ? [[".browser-profiles", profile] as const] : [])],
+      context,
+    );
+  }
+}
+
+/**
+ * Remove deleted bots' folders and browser profiles from the stored home of the space's Team
+ * Computer from before each person got their own. Throws when the stored copy could not be
+ * saved; bot_deletions keeps the ids, so the caller can retry.
+ */
+export async function removeDeletedBotsFromLegacyTeamHome(
+  deps: Pick<BotLifecycleDeps, "prisma" | "home" | "sandbox" | "dataDir">,
+  spaceId: string,
+  botIds: readonly string[],
+) {
+  const legacy = await deps.prisma.computer.findUnique({
+    where: { homeKey: legacyTeamHomeKey(spaceId) },
   });
-  if (!computer) return;
+  // Only a remote provider's stored copy is written by the server alone; see removeBotFolders.
+  if (legacy?.scope !== "team" || !serverOwnsTeamHome(deps.sandbox, legacy.kind)) return;
+  const folders = botIds.filter(isTeamBotFolderName);
+  const profiles = botIds.flatMap((id) => teamBrowserProfileName(id) ?? []);
+  if (folders.length)
+    await removeAgentHomeFolders(deps.home, legacy.homeKey, "bots", folders, deps.dataDir);
+  if (profiles.length)
+    await removeAgentHomeFolders(
+      deps.home,
+      legacy.homeKey,
+      ".browser-profiles",
+      profiles,
+      deps.dataDir,
+    );
+}
+
+async function removeBotFolders(
+  deps: BotLifecycleDeps,
+  botId: string,
+  computer: { homeKey: string; kind: string; providerRef: string | null; state: string },
+  folders: ReadonlyArray<readonly [".browser-profiles" | "bots", string]>,
+  context: AdapterContext,
+) {
   // Remote providers keep a stored copy that only the server writes, and replacement computers
   // restore from it. Any other home may be mounted by a running computer, where a bot could
   // swap bots/ for a symlink between the checks and rm, so it is only cleaned inside the computer.
-  if (REMOTE_TEAM_SANDBOX_KINDS.has(computer.kind)) {
-    const homeDir = resolveAgentHomePath(deps.home, computer.homeKey, deps.dataDir ?? "./data");
-    await removeContainedDirectory(homeDir, "bots", bot.id).catch((error) => {
-      getLogger().error("team bot folder cleanup", error);
-    });
+  if (serverOwnsTeamHome(deps.sandbox, computer.kind)) {
+    for (const [parent, name] of folders) {
+      await removeAgentHomeFolders(deps.home, computer.homeKey, parent, [name], deps.dataDir).catch(
+        (error) => {
+          getLogger().error("team bot folder cleanup", error);
+        },
+      );
+    }
   }
   if (computer.state !== "running" || !computer.providerRef) return;
-  const folderContext = { ...context, botId: bot.id, screenLeaseId: undefined };
-  await withCleanupDeadline(folderContext, LIVE_CLEANUP_BUDGET_MS, (cleanupContext) =>
-    removeComputerWorkspaceDirectories(
-      deps.sandbox,
-      toComputerRef(computer),
-      "bots",
-      [bot.id],
-      cleanupContext,
-    ),
-  ).catch((error) => {
+  const folderContext = { ...context, botId, screenLeaseId: undefined };
+  const ref = toComputerRef(computer);
+  await withCleanupDeadline(folderContext, LIVE_CLEANUP_BUDGET_MS, async (cleanupContext) => {
+    for (const [parent, name] of folders) {
+      await removeComputerWorkspaceDirectories(deps.sandbox, ref, parent, [name], cleanupContext);
+    }
+  }).catch((error) => {
     getLogger().error("team bot folder cleanup", error);
   });
-}
-
-/** Delete one folder in the team home. A symlinked parent is refused; a final symlink is unlinked. */
-async function removeContainedDirectory(root: string, parent: string, name: string) {
-  const target = path.join(root, parent, name);
-  const info = await lstat(target).catch((error: unknown) => {
-    if (isMissing(error)) return null;
-    throw error;
-  });
-  if (!info) return;
-  const parentInfo = await lstat(path.dirname(target)).catch((error: unknown) => {
-    if (isMissing(error)) return null;
-    throw error;
-  });
-  if (!parentInfo || parentInfo.isSymbolicLink() || !parentInfo.isDirectory()) {
-    throw new Error("folder escapes the team home");
-  }
-  if (info.isSymbolicLink()) {
-    await unlink(target);
-    return;
-  }
-  const resolvedRoot = await realpath(root);
-  const resolvedTarget = await realpath(target);
-  const relative = path.relative(resolvedRoot, resolvedTarget);
-  if (
-    path.dirname(resolvedTarget) !== path.join(resolvedRoot, parent) ||
-    path.basename(resolvedTarget) !== name ||
-    relative === "" ||
-    relative.startsWith("..") ||
-    path.isAbsolute(relative)
-  ) {
-    throw new Error("folder escapes the team home");
-  }
-  await rm(resolvedTarget, { recursive: true, force: true });
-}
-
-function isMissing(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT";
 }

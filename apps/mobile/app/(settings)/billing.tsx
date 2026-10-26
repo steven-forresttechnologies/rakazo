@@ -10,17 +10,19 @@ import { useCallback, useState } from "react";
 import { Alert, AppState, Linking, ScrollView } from "react-native";
 import { SettingsGroup, SettingsRow } from "../../components/settings-group";
 import { rpc } from "../../lib/api";
-import { useI18n } from "../../lib/i18n";
+import { dateLocaleForUi, useI18n } from "../../lib/i18n";
+import { useSideInsets } from "../../lib/side-insets";
 
 type Amount = (typeof MODEL_CREDIT_AMOUNTS)[number];
 export default function BillingScreen() {
+  const sideInsets = useSideInsets();
   const { t } = useI18n();
   const router = useRouter();
   const [status, setStatus] = useState<BillingStatus | null>(null);
   const [amount, setAmount] = useState<Amount>(DEFAULT_MONTHLY_CREDIT_AMOUNT);
   const [pending, setPending] = useState(false);
   const refresh = useCallback(async () => {
-    const next = await rpc<BillingStatus>("billing/status");
+    const next = await rpc("billing/status");
     setStatus(next);
     setAmount(
       ModelCreditAmountSchema.catch(DEFAULT_MONTHLY_CREDIT_AMOUNT).parse(next.monthlyAmountCents),
@@ -30,7 +32,7 @@ export default function BillingScreen() {
     useCallback(() => {
       let active = true;
       const load = () => {
-        void rpc<BillingStatus>("billing/status")
+        void rpc("billing/status")
           .then((next) => {
             if (active) {
               setStatus(next);
@@ -66,11 +68,18 @@ export default function BillingScreen() {
       setPending(false);
     }
   }
+  const freeUntil = status?.byokFreeUntil
+    ? new Date(status.byokFreeUntil).toLocaleDateString(dateLocaleForUi(), {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    : null;
   const recurring = Boolean(
     status?.monthlyAmountCents && !["none", "canceled", "incomplete"].includes(status.state),
   );
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic">
+    <ScrollView style={sideInsets} contentInsetAdjustmentBehavior="automatic">
       <SettingsGroup label={t("Credits")}>
         <SettingsRow
           title={t("Available credits")}
@@ -109,7 +118,7 @@ export default function BillingScreen() {
                     : amount < (status.monthlyAmountCents ?? 0)
                       ? t("Downgrade at renewal")
                       : t("Update")
-                  : t("Continue with credits")
+                  : t("Subscribe")
               }
               disabled={pending || !status.creditPurchasesEnabled}
               onPress={() =>
@@ -118,7 +127,7 @@ export default function BillingScreen() {
                     await rpc("billing/setMonthlyCredits", { amountCents: amount });
                     await refresh();
                   } else {
-                    const result = await rpc<{ url: string }>("billing/purchaseCredits", {
+                    const result = await rpc("billing/purchaseCredits", {
                       amountCents: amount,
                       monthly: true,
                     });
@@ -137,7 +146,7 @@ export default function BillingScreen() {
               onPressAction={({ nativeEvent }) =>
                 void action(async () => {
                   const amountCents = ModelCreditAmountSchema.parse(Number(nativeEvent.event));
-                  const result = await rpc<{ url: string }>("billing/purchaseCredits", {
+                  const result = await rpc("billing/purchaseCredits", {
                     amountCents,
                     monthly: false,
                   });
@@ -157,7 +166,7 @@ export default function BillingScreen() {
                 disabled={pending}
                 onPress={() =>
                   void action(async () => {
-                    const result = await rpc<{ url: string }>("billing/portal");
+                    const result = await rpc("billing/portal");
                     await Linking.openURL(result.url);
                   })
                 }
@@ -178,18 +187,39 @@ export default function BillingScreen() {
               />
             </SettingsGroup>
           ) : null}
-          {!recurring || status.cancelAtPeriodEnd ? (
+          {freeUntil ? (
+            <SettingsGroup label={t("Your subscription or API key")}>
+              <SettingsRow title={t("Free plan ends")} value={freeUntil} />
+              <SettingsRow
+                title={t("Subscribe")}
+                disabled={pending}
+                onPress={() =>
+                  void action(async () => {
+                    const result = await rpc("billing/checkout");
+                    await Linking.openURL(result.url);
+                  })
+                }
+              />
+            </SettingsGroup>
+          ) : !recurring || status.cancelAtPeriodEnd ? (
             <SettingsGroup
               label={t("Your subscription or API key")}
-              footer={t("Free. ChatGPT, Claude, or any model provider.")}
+              footer={
+                status.byokPriceCents
+                  ? t("{price} / month. Works with your ChatGPT or Claude plan.", {
+                      price: `$${status.byokPriceCents / 100}`,
+                    })
+                  : t("Free. Works with your ChatGPT or Claude plan.")
+              }
             >
               <SettingsRow
                 title={t("Use my subscription or API key")}
                 disabled={pending}
                 onPress={() =>
                   void action(async () => {
-                    await rpc("billing/selectFunding", { funding: "byok" });
-                    router.replace("/models");
+                    const result = await rpc("billing/selectFunding", { funding: "byok" });
+                    if (result.url) await Linking.openURL(result.url);
+                    else router.replace("/models");
                   })
                 }
               />

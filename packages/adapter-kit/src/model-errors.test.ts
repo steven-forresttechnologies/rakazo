@@ -35,6 +35,7 @@ describe("transient model errors", () => {
     ["bad gateway", new Error("502 Bad Gateway")],
     ["empty truncated stream", new Error("Stream ended without finish_reason")],
     ["dropped fetch body", new TypeError("terminated")],
+    ["provider network stop", new Error("Provider finish_reason: network_error")],
     ["fetch failure", new TypeError("fetch failed")],
     ["SDK connection failure", new Error("Connection error.")],
     ["SDK connection timeout", new Error("Request timed out.")],
@@ -76,6 +77,12 @@ describe("transient model errors", () => {
     ["auth failure mentioning a connection error", { status: 401, message: "Connection error." }],
     ["cancellation", new Error("Request was aborted")],
     ["unknown", new Error("Model stream ended without a terminal event")],
+    [
+      "a key that is not a valid header value",
+      new TypeError(
+        'Headers.append: "example key\nclient = Client(timeout=30, rate_limit=1)" is an invalid header value.',
+      ),
+    ],
   ])("treats %s as permanent", (_label, error) => {
     expect(isTransientModelError(error)).toBe(false);
   });

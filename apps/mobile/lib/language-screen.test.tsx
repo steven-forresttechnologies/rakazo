@@ -11,6 +11,7 @@ import * as i18n from "./i18n";
 import { resumeLiveNotifications } from "./live-notifications";
 import { UI_LOCALE_LABELS, UI_LOCALE_STORAGE_KEY, UI_LOCALES } from "./ui-locale";
 
+vi.mock("./side-insets", () => ({ useSideInsets: () => ({}) }));
 vi.mock("./api", () => ({
   currentApiBase: () => "https://rakazo.test",
   loadSessionToken: async () => "token",
@@ -88,7 +89,7 @@ function expectSelected(label: string) {
   expect(row(label).querySelector('[data-symbol="checkmark"]')).not.toBeNull();
 }
 
-it.each(["ru", "de"] as const)(
+it.each(["ru", "de", "zh-TW"] as const)(
   "saves and selects %s when its language row is pressed",
   async (locale) => {
     let finishSave!: () => void;

@@ -600,6 +600,7 @@ function expireClient(run: ReturnType<typeof candidate>, options?: { cancelled?:
     message: {
       create: vi.fn(async () => ({ id: "message-expired", seq: 1 })),
       findFirst: vi.fn(async () => null),
+      findMany: vi.fn(async () => []),
     },
     event: {
       findMany: vi.fn(async () => []),
@@ -608,6 +609,7 @@ function expireClient(run: ReturnType<typeof candidate>, options?: { cancelled?:
     },
     computerExecutionLease: { updateMany: vi.fn(async () => ({ count: 1 })) },
     computer: { updateMany: vi.fn(async () => ({ count: 1 })) },
+    secret: { deleteMany: vi.fn(async () => ({ count: 0 })) },
     steeringMessage: {
       updateMany: vi.fn(async () => ({ count: 1 })),
       findMany: vi.fn(async () => [

@@ -147,6 +147,12 @@ describe("shared Linux desktop lifecycle", () => {
     },
   );
 
+  it("binds IPv6 computer gateways and probes IPv6 loopback", () => {
+    const command = terminalCommand("control", "terminal", "/work", { ...env, bindHost: "::" });
+    expect(command).toContain("--token-source=/tmp/rakazo/desktop-targets :::6100 8>&-");
+    expect(command).toContain("/dev/tcp/::1/6100");
+  });
+
   it.each([
     "",
     "example.test",
@@ -263,6 +269,18 @@ describe("shared Linux desktop lifecycle", () => {
     expect(readFileSync(path.join(f.root, slot), "utf8")).toContain("new:2");
   });
 
+  it("keeps a completed run's display for that bot's next run and rejects its stale fence", () => {
+    const f = fixture();
+    expect(f.ensure("a", "run:1").stdout).toContain("RAKAZO_DESKTOP=0:view-a");
+    expect(f.run(desktopControlCommand("a", "run:1", env, false)).status).toBe(0);
+    const slot = readdirSync(f.root).find((name) => name.endsWith(".slot"))!;
+    expect(readFileSync(path.join(f.root, slot), "utf8")).toBe("0\nrun:1\nview-a\n");
+    expect(f.ensure("b").stdout).toContain("RAKAZO_DESKTOP=1:view-b");
+    expect(f.ensure("a", "next:2").stdout).toContain("RAKAZO_DESKTOP=0:view-a");
+    expect(f.run(desktopControlCommand("a", "run:1", env, false)).status).toBe(75);
+    expect(f.release("a", "run:1").status).toBe(75);
+  });
+
   it("opens a terminal only on an assigned display under the current lease", () => {
     const f = fixture();
     expect(f.run(desktopTerminalCommand("missing", "run:1", env, "c", "t", ".")).status).toBe(75);
@@ -287,6 +305,8 @@ describe("shared Linux desktop lifecycle", () => {
     const execAt = lines.findIndex((line) => line.startsWith("exec "));
     expect(unsetAt).toBeGreaterThan(-1);
     expect(execAt).toBeGreaterThan(unsetAt);
+    // A relaunch keeps the bot's tabs and session cookies, matching rakazo-browser.
+    expect(lines[execAt]).toContain("--restore-last-session");
   });
 
   it.each([false, true])(

@@ -1,4 +1,29 @@
 export const DE_MESSAGES: Record<string, string> = {
+  "Not sent. Tap for options": "Nicht gesendet. Tippen für Optionen",
+  "Image input is not configured for this model.":
+    "Bildeingabe ist für dieses Modell nicht konfiguriert.",
+  "Send as file": "Als Datei senden",
+  "The bot can use the file but won't see the picture.":
+    "Der Bot kann die Datei nutzen, sieht das Bild aber nicht.",
+  "This model cannot read images. Choose a model that supports images.":
+    "Dieses Modell kann keine Bilder lesen. Wähle ein Modell, das Bilder unterstützt.",
+  "Could not connect to the computer screen":
+    "Verbindung zum Computerbildschirm konnte nicht hergestellt werden",
+  "Retry screen": "Bildschirm erneut verbinden",
+  "The screen connection closed.": "Die Bildschirmverbindung wurde geschlossen.",
+  Approvals: "Freigaben",
+  "Never ask": "Nie fragen",
+  Auto: "Auto",
+  Ask: "Fragen",
+  Block: "Blockieren",
+  "Add a model in Settings to use this.":
+    "Füge in den Einstellungen ein Modell hinzu, um dies zu nutzen.",
+  "Approval model": "Freigabemodell",
+  "Main model": "Hauptmodell",
+  "Add fallback": "Backup-Modell hinzufügen",
+  "Manage {provider}": "{provider} verwalten",
+  "Add provider": "Anbieter hinzufügen",
+  "Choose a model": "Modell auswählen",
   "Use 80 characters or fewer": "Höchstens 80 Zeichen verwenden",
   "Could not update name": "Name konnte nicht aktualisiert werden",
   "{summary} Your backup models also failed.":
@@ -15,8 +40,6 @@ export const DE_MESSAGES: Record<string, string> = {
   Export: "Exportieren",
   "Edit avatar": "Avatar bearbeiten",
   "Add open work": "Offene Aufgabe hinzufügen",
-  "Can edit and organise bots it creates": "Kann erstellte Bots bearbeiten und organisieren",
-  "How other bots see it": "So sehen andere Bots ihn",
   Permissions: "Berechtigungen",
   "Open work": "Offene Aufgaben",
   "When it finishes or needs input": "Wenn der Bot fertig ist oder Eingaben benötigt",
@@ -27,11 +50,9 @@ export const DE_MESSAGES: Record<string, string> = {
   "Add an AI model to keep chatting": "Füge ein KI-Modell hinzu, um weiterzuchatten",
   "Not Now": "Jetzt nicht",
   "Add Model": "Modell hinzufügen",
-  "Not sent · No model": "Nicht gesendet · Kein Modell",
+  "Not sent. No model": "Nicht gesendet. Kein Modell",
   "Update required": "Update erforderlich",
   Update: "Aktualisieren",
-  Provider: "Anbieter",
-  "No matching providers": "Keine passenden Anbieter",
   "To:": "An:",
   Next: "Weiter",
   "Ex: Project Falcon": "Z. B. Projekt Falcon",
@@ -52,10 +73,6 @@ export const DE_MESSAGES: Record<string, string> = {
   Limit: "Limit",
   "Provider message": "Anbieternachricht",
   Status: "Status",
-  "Set your own key": "Eigenen Schlüssel hinterlegen",
-  "Add your own key or pick another model.":
-    "Füge deinen eigenen Schlüssel hinzu oder wähle ein anderes Modell.",
-  "Choose another model to keep chatting.": "Wähle ein anderes Modell, um weiterzuchatten.",
   "Resets {date}.": "Wird am {date} zurückgesetzt.",
 
   "Model provider": "Modellanbieter",
@@ -79,22 +96,29 @@ export const DE_MESSAGES: Record<string, string> = {
     "Auf dem Server ist ein Problem aufgetreten. Versuche es gleich noch einmal.",
   "Password sign-in is turned off on this server":
     "Die Anmeldung mit Passwort ist auf diesem Server deaktiviert",
+  "Password must be {max} characters or fewer":
+    "Das Passwort darf höchstens {max} Zeichen lang sein",
   "Could not save your sign-in on this device. Try again.":
     "Deine Anmeldung konnte auf diesem Gerät nicht gespeichert werden. Versuche es erneut.",
   "Your OpenRouter": "Dein OpenRouter",
   "Your OpenAI": "Dein OpenAI",
   "Your Anthropic": "Dein Anthropic",
   "Your model provider": "Dein Modellanbieter",
+  "Connect a model in Settings before running bots.":
+    "Verbinde ein Modell in den Einstellungen, bevor du Bots ausführst.",
+  "Connect your own API key in Models or choose Rakazo credits in Billing.":
+    "Verbinde deinen eigenen API-Schlüssel unter Modelle oder wähle Rakazo-Guthaben unter Abrechnung.",
   "The model provider returned an error.": "Der Modellanbieter hat einen Fehler zurückgegeben.",
   "{provider} is rate limiting requests. Try again shortly.":
     "{provider} begrenzt die Anfragerate. Versuche es gleich noch einmal.",
   "{summary} Resets {date}.": "{summary} Zurücksetzung am {date}.",
   "{provider} rejected the API key. Check your connection settings.":
     "{provider} hat den API-Schlüssel abgelehnt. Prüfe deine Verbindungseinstellungen.",
-  "{provider} could not find the requested model.":
-    "{provider} konnte das angeforderte Modell nicht finden.",
+  "{provider} can't run this model.": "{provider} kann dieses Modell nicht ausführen.",
   "{provider} denied access to this model.":
     "{provider} hat den Zugriff auf dieses Modell verweigert.",
+  "The model hit its output limit before finishing its reply.":
+    "Das Modell hat sein Ausgabelimit erreicht, bevor es die Antwort fertig geschrieben hat.",
   "The model returned an unusable response. Try again.":
     "Das Modell hat eine unbrauchbare Antwort geliefert. Versuche es erneut.",
   "This model's context window is too small. Choose another model.":
@@ -129,7 +153,7 @@ export const DE_MESSAGES: Record<string, string> = {
   "Try Again": "Erneut versuchen",
   "Too many unsent messages": "Zu viele ungesendete Nachrichten",
   "Not sent": "Nicht gesendet",
-  "Not sent · Tap to retry": "Nicht gesendet · Zum Wiederholen tippen",
+  "Not sent. Tap to retry": "Nicht gesendet. Zum Wiederholen tippen",
   Photo: "Foto",
   Today: "Heute",
   Yesterday: "Gestern",
@@ -165,8 +189,8 @@ export const DE_MESSAGES: Record<string, string> = {
   Integrations: "Integrationen",
   Models: "Modelle",
   "New bot": "Neuer Bot",
-  "New group": "Neue Gruppe",
-  "New space": "Neuer Space",
+  "New group chat": "Neuer Gruppenchat",
+  "New private space": "Neuer privater Space",
   Routine: "Routine",
   "Server integrations": "Server-Integrationen",
   Thread: "Thread",
@@ -175,8 +199,6 @@ export const DE_MESSAGES: Record<string, string> = {
   "Already have an account?": "Du hast bereits ein Konto?",
   "Back to sign in": "Zurück zur Anmeldung",
   "Check your email": "Prüfe deine E-Mails",
-  "Use password": "Passwort verwenden",
-  "Use email code": "E-Mail-Code verwenden",
   "Invalid code": "Ungültiger Code",
   "Request a new code": "Fordere einen neuen Code an",
   "Checking…": "Wird geprüft…",
@@ -226,8 +248,13 @@ export const DE_MESSAGES: Record<string, string> = {
   "Search conversations, files, and routines": "Unterhaltungen, Dateien und Routinen durchsuchen",
   "Searching…": "Suche…",
   "Space actions for {name}": "Space-Aktionen für {name}",
+  // app/(settings)/space.tsx
+  Customize: "Anpassen",
+  "Customize {setting}": "{setting} anpassen",
   "Tap + to create a bot": "Tippe auf +, um einen Bot zu erstellen",
-  "This removes the empty space for everyone.": "Das entfernt den leeren Space für alle.",
+  "This removes the space for everyone.": "Das entfernt den Space für alle.",
+  "Delete {name} and its bot?": "{name} und seinen Bot löschen?",
+  "Delete {name} and its {count} bots?": "{name} und seine {count} Bots löschen?",
   "notifications silenced": "Benachrichtigungen stumm",
   unread: "ungelesen",
   // app/thread.tsx
@@ -423,6 +450,18 @@ export const DE_MESSAGES: Record<string, string> = {
   Profile: "Profil",
   Routines: "Routinen",
   "Could not load routines": "Routinen konnten nicht geladen werden",
+  "{count} on": "{count} aktiv",
+  "Ask this Bot in chat to set up a routine.":
+    "Bitte diesen Bot im Chat, eine Routine einzurichten.",
+  "{name}, On": "{name}, Ein",
+  "{name}, Off": "{name}, Aus",
+  "Active: {name}": "Aktiv: {name}",
+  "Delete {name}": "{name} löschen",
+  "Delete this routine?": "Diese Routine löschen?",
+  "This permanently deletes the routine and its run history.":
+    "Die Routine und ihr Ausführungsverlauf werden endgültig gelöscht.",
+  "Could not delete routine": "Routine konnte nicht gelöscht werden",
+  "Could not update routine": "Routine konnte nicht aktualisiert werden",
   "Get notified when this Bot finishes or needs input":
     "Benachrichtigung, wenn dieser Bot fertig ist oder Eingabe braucht",
   // app/computer.tsx
@@ -459,17 +498,13 @@ export const DE_MESSAGES: Record<string, string> = {
     "Verwendet die eigenen {source}-Zugangsdaten dieses Servers für den Zugriff auf {provider}.",
   "Connect API key": "API-Schlüssel verbinden",
   "Connect MCP server {name}": "MCP-Server „{name}“ verbinden",
-  "Connected and using {label}.": "Verbunden, {label} ist aktiv.",
-  "Connected. Its tools are available from your next message.":
-    "Verbunden. Seine Tools sind ab deiner nächsten Nachricht verfügbar.",
+  "Connected.": "Verbunden.",
   "Context limit": "Kontextlimit",
-  "Could not change the default model": "Standardmodell konnte nicht geändert werden",
   "Could not connect this provider": "Anbieter konnte nicht verbunden werden",
   "Could not finish sign-in": "Anmeldung konnte nicht abgeschlossen werden",
   "Could not reach this model server": "Modellserver konnte nicht erreicht werden",
   "Could not start sign-in": "Anmeldung konnte nicht gestartet werden",
   Default: "Standard",
-  "Deployment default": "Bereitstellungsstandard",
   "Enter a whole number from 1 to 1000 for the image limit.":
     "Gib eine ganze Zahl von 1 bis 1000 für das Bilderlimit ein.",
   "Enter a whole number from 1 to {max} for maximum output tokens.":
@@ -485,11 +520,8 @@ export const DE_MESSAGES: Record<string, string> = {
   "Maximum images per request": "Maximale Bilder pro Anfrage",
   "Maximum output tokens": "Maximale Ausgabetokens",
   "Model id": "Modell-ID",
-  "Model updated.": "Modell aktualisiert.",
   "No matching models": "Keine passenden Modelle",
-  "Not connected": "Nicht verbunden",
   "Not now": "Nicht jetzt",
-  "Now using {label}.": "{label} ist jetzt aktiv.",
   "OpenAI-compatible server URL": "URL eines OpenAI-kompatiblen Servers",
   Optional: "Optional",
   "Or connect an API key": "Oder einen API-Schlüssel verbinden",
@@ -509,19 +541,14 @@ export const DE_MESSAGES: Record<string, string> = {
   Submit: "Absenden",
   "Supports images": "Unterstützt Bilder",
   "Supports thinking": "Unterstützt Denkmodus",
-  "Switching…": "Wird gewechselt…",
-  "The final page may not load. Paste its URL or code here.":
-    "Die letzte Seite lädt womöglich nicht. Füge ihre URL oder ihren Code hier ein.",
+  "Then paste the code here.": "Füge dann den Code hier ein.",
   "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider.":
     "Diese Abonnementanmeldung ist in Rakazo noch nicht verfügbar. Verwende Zugangsdaten der Bereitstellung oder wähle einen anderen Anbieter.",
   "Use a found model": "Gefundenes Modell verwenden",
-  "Use this model": "Dieses Modell verwenden",
   "Waiting for sign-in…": "Warten auf Anmeldung…",
   "exact-model-id": "exact-model-id",
   "http://127.0.0.1:8000/v1": "http://127.0.0.1:8000/v1",
-  "http://localhost:53692/callback?code=…": "http://localhost:53692/callback?code=…",
   "sk-…": "sk-…",
-  "this model": "dieses Modell",
   // app/(settings)/integrations.tsx
   "1 tool": "1 Tool",
   "Account label": "Kontobezeichnung",
@@ -616,7 +643,7 @@ export const DE_MESSAGES: Record<string, string> = {
   "Hear a sample": "Beispiel anhören",
   "Hi, this is how I'll sound when I read replies out loud.":
     "Hallo, so klinge ich, wenn ich Antworten vorlese.",
-  "On · Free, works offline": "Ein · Kostenlos, funktioniert offline",
+  "Free, works offline": "Kostenlos, funktioniert offline",
   "Paste a replacement key": "Ersatzschlüssel einfügen",
   "Paste your API key": "Füge deinen API-Schlüssel ein",
   "Replace key": "Schlüssel ersetzen",
@@ -658,7 +685,6 @@ export const DE_MESSAGES: Record<string, string> = {
   "Scheduled tasks": "Geplante Aufgaben",
   "Sign out": "Abmelden",
   "Stream replies": "Antworten streamen",
-  "Run actions without asking": "Aktionen ohne Nachfrage ausführen",
   "Load web images automatically": "Webbilder automatisch laden",
   System: "System",
   "This permanently deletes your account, bots, conversations, memories, files, and saved connections. This cannot be undone.":
@@ -666,8 +692,8 @@ export const DE_MESSAGES: Record<string, string> = {
   "Try again.": "Versuche es erneut.",
   Usage: "Nutzung",
   "Your account": "Dein Konto",
-  "{runs} runs · {tokens} tokens": "{runs} Ausführungen · {tokens} Token",
-  "{calls} calls · {tokens} tokens": "{calls} Aufrufe · {tokens} Token",
+  "{runs} runs, {tokens} tokens": "{runs} Ausführungen, {tokens} Token",
+  "{calls} calls, {tokens} tokens": "{calls} Aufrufe, {tokens} Token",
   // app/(settings)/change-password.tsx
   "Confirm password": "Passwort bestätigen",
   "Could not change password": "Passwort konnte nicht geändert werden",
@@ -676,6 +702,8 @@ export const DE_MESSAGES: Record<string, string> = {
   // components/AskActions.tsx
   "Allow once": "Einmal erlauben",
   "Always allow": "Immer erlauben",
+  "Always allow this tool": "Dieses Tool immer erlauben",
+  "Always allow {site}": "{site} immer erlauben",
   "Could not submit answer": "Antwort konnte nicht gesendet werden",
   Deny: "Ablehnen",
   "Please try again.": "Versuche es erneut.",
@@ -713,6 +741,8 @@ export const DE_MESSAGES: Record<string, string> = {
   "Recover computer": "Computer wiederherstellen",
   "Recovering…": "Wird wiederhergestellt…",
   Reset: "Zurücksetzen",
+  "Stop computer": "Computer stoppen",
+  "Could not stop computer": "Computer konnte nicht gestoppt werden",
   "Reset computer": "Computer zurücksetzen",
   "Reset computer?": "Computer zurücksetzen?",
   "Resetting…": "Wird zurückgesetzt…",
@@ -783,10 +813,10 @@ export const DE_MESSAGES: Record<string, string> = {
   "Waiting…": "Warten…",
   // lib/app-version.ts
   Embedded: "Eingebettet",
-  "OTA · {id}": "OTA · {id}",
-  "OTA · {id} · {date}": "OTA · {id} · {date}",
-  "{channel} · {id}": "{channel} · {id}",
-  "{channel} · {id} · {date}": "{channel} · {id} · {date}",
+  "OTA {id}": "OTA {id}",
+  "OTA {id}, {date}": "OTA {id}, {date}",
+  "{channel} {id}": "{channel} {id}",
+  "{channel} {id}, {date}": "{channel} {id}, {date}",
   // lib/artifact-open.ts
   "Saved {name} locally": "{name} lokal gespeichert",
   // lib/bot-lifecycle.ts
@@ -826,12 +856,10 @@ export const DE_MESSAGES: Record<string, string> = {
   // lib/voice.ts
   "Could not play that clip.": "Dieser Clip konnte nicht abgespielt werden.",
   // app/(settings)/models.tsx
-  "Add backup model": "Backup-Modell hinzufügen",
   "Move down": "Nach unten",
   "Move up": "Nach oben",
   "Tried in order if the active model fails.":
     "Werden der Reihe nach versucht, wenn das aktive Modell ausfällt.",
-  "Backup models": "Backup-Modelle",
   "Could not load backup models": "Backup-Modelle konnten nicht geladen werden.",
   "Could not save backup models": "Backup-Modelle konnten nicht gespeichert werden.",
   "Space changed. Reload Models to refresh backup models.":
@@ -840,7 +868,6 @@ export const DE_MESSAGES: Record<string, string> = {
     "Der Space wurde gewechselt. Lade Modelle neu, bevor du Backups speicherst.",
   "A sign-in page opened — enter this code there:":
     "Eine Anmeldeseite wurde geöffnet — gib dort diesen Code ein:",
-  "All providers": "Alle Anbieter",
   Copied: "Kopiert",
   "Copy code": "Code kopieren",
   "Could not disconnect this provider": "Anbieter konnte nicht getrennt werden",
@@ -1004,8 +1031,12 @@ export const DE_MESSAGES: Record<string, string> = {
   "Add credits": "Guthaben hinzufügen",
   "Manage billing": "Abrechnung verwalten",
   "Your subscription or API key": "Dein Abo oder API-Schlüssel",
-  "Free. ChatGPT, Claude, or any model provider.":
-    "Kostenlos. ChatGPT, Claude oder ein beliebiger Modellanbieter.",
+  "Free. Works with your ChatGPT or Claude plan.":
+    "Kostenlos. Funktioniert mit deinem ChatGPT- oder Claude-Abo.",
+  "{price} / month. Works with your ChatGPT or Claude plan.":
+    "{price} / Monat. Funktioniert mit deinem ChatGPT- oder Claude-Abo.",
+  "Free plan ends": "Kostenloser Tarif endet",
+  Subscribe: "Abonnieren",
   "Use my subscription or API key": "Mein Abo oder meinen API-Schlüssel verwenden",
   "Monthly credits expire at renewal. Top-ups do not expire.":
     "Monatliches Guthaben verfällt bei Verlängerung. Einmalige Aufladungen verfallen nicht.",
@@ -1022,4 +1053,71 @@ export const DE_MESSAGES: Record<string, string> = {
   "How big is your team?": "Wie groß ist dein Team?",
   "How did you hear about us?": "Wie hast du von uns erfahren?",
   "Welcome to Rakazo": "Willkommen bei Rakazo",
+  Messaging: "Nachrichten",
+  Unlink: "Verknüpfung aufheben",
+  "Connect a chat app": "Chat-App verbinden",
+  Conversations: "Unterhaltungen",
+  Decline: "Ablehnen",
+  Leave: "Verlassen",
+  Pending: "Ausstehend",
+  Requests: "Anfragen",
+  Revoke: "Widerrufen",
+  "Send {code} from {app} within 10 minutes.": "Sende {code} innerhalb von 10 Minuten aus {app}.",
+  "Send {code} to {address} from {app} within 10 minutes.":
+    "Sende {code} innerhalb von 10 Minuten aus {app} an {address}.",
+  "Slack workspace": "Slack-Workspace",
+  "Always act": "Immer handeln",
+  "Automated senders will appear after they post here.":
+    "Automatisierte Absender erscheinen, sobald sie hier posten.",
+  "Automated senders": "Automatisierte Absender",
+  "Could not save": "Speichern fehlgeschlagen",
+  "Engage when... Ignore...": "Reagieren, wenn … Ignorieren …",
+  Every: "Alle",
+  "External conversation": "Externe Unterhaltung",
+  "Group updates": "Updates bündeln",
+  Ignore: "Ignorieren",
+  Listen: "Zuhören",
+  Listening: "Zuhören",
+  "Mentions only": "Nur Erwähnungen",
+  "Room guidance": "Raumhinweise",
+  "Treat like a person": "Wie eine Person behandeln",
+  "Use default guidance": "Standardhinweise verwenden",
+  hours: "Stunden",
+  "{bot} default": "{bot}-Standard",
+  "{bot} will still respond to direct mentions.":
+    "{bot} antwortet weiterhin auf direkte Erwähnungen.",
+  "{sender} rollup hours": "{sender}: Bündelung in Stunden",
+  "Add workspace": "Workspace hinzufügen",
+  "Chat with your bot from Slack.": "Chatte über Slack mit deinem Bot.",
+  "Link DMs": "DMs verknüpfen",
+  "One-time": "Einmalig",
+  "Every hour": "Jede Stunde",
+  Cron: "Cron",
+  "Every day": "Jeden Tag",
+  Weekdays: "Werktags",
+  Weekends: "Wochenends",
+  "Every Monday": "Jeden Montag",
+  Monthly: "Monatlich",
+  Sunday: "Sonntag",
+  Monday: "Montag",
+  Tuesday: "Dienstag",
+  Wednesday: "Mittwoch",
+  Thursday: "Donnerstag",
+  Friday: "Freitag",
+  Saturday: "Samstag",
+  "{n} {unit}": "{n} {unit}",
+  "every {n} {unit}": "alle {n} {unit}",
+  minute: "Minute",
+  minutes: "Minuten",
+  hour: "Stunde",
+  day: "Tag",
+  days: "Tage",
+  "at {time}": "um {time}",
+  "on the 1st at {time}": "am 1. um {time}",
+  "on day {day} at {time}": "am {day}. um {time}",
+  "Every hour at :{minute}": "Jede Stunde um :{minute}",
+  "Every {n} hours at :{minute}": "Alle {n} Stunden um :{minute}",
+  "{from} to {to}": "{from} bis {to}",
+  "Every {day}": "Jeden {day}",
+  "Every {days} and {last}": "Jeden {days} und {last}",
 };

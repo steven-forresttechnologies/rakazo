@@ -7,7 +7,8 @@ import { PiAgentRuntime } from "@rakazo/adapters";
 import * as Core from "@rakazo/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { estimateTextTokens } from "../../adapters/src/context-selection.js";
-import { type ModelEmulatorRequest, startModelEmulator } from "./model-emulator.js";
+import type { ModelEmulatorRequest } from "./model-emulator.js";
+import { startModelEmulator } from "./model-emulator.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -554,7 +555,11 @@ describe("real Pi against an offline model HTTP endpoint", () => {
 
   it("rejects an interrupted SSE response without emitting successful completion", async () => {
     const server = await startModelEmulator({
-      steps: [{ expect() {}, response: { type: "disconnect", text: "Working" } }],
+      // The cut reply is continued once; a continuation that is cut too fails the run.
+      steps: [
+        { expect() {}, response: { type: "disconnect", text: "Working" } },
+        { expect() {}, response: { type: "disconnect", text: " on it" } },
+      ],
     });
     cleanups.push(() => server.close());
     const events: AgentRuntimeEvent[] = [];

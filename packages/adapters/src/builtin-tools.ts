@@ -7,11 +7,15 @@ import {
   FLEET_TOOL_NAMES,
   SecretAskPurpose,
   SecretHttpRequest,
+  TICKET_COMMENT_MAX_LENGTH,
+  TICKET_DESCRIPTION_MAX_LENGTH,
   TICKET_PRIORITIES,
   TICKET_STATUSES,
+  TICKET_TITLE_MAX_LENGTH,
 } from "@rakazo/contracts";
 import { z } from "zod";
 import { allowPrivateHttpSecretOrigins } from "./bot-secrets.js";
+import { BROWSER_ACT_KINDS } from "./browser-tools.js";
 import { messageUserMaxLength } from "./user-progress.js";
 
 // The owner flag can land in process.env after static imports run (loadRootEnv
@@ -82,7 +86,7 @@ const scheduleCreateProperties = {
   prompt: {
     type: "string",
     description:
-      "Concrete steps for when the schedule fires: name the connected plugin tools to call (e.g. GITHUB_LIST_RELEASES for owner/repo), what to extract, and how to report. Prefer plugin tools over computer browser or web search for app data.",
+      'Concrete steps for when the schedule fires: what to use, what to extract, and how to report. Name the connected plugin tools to call when one covers the data (e.g. GITHUB_LIST_RELEASES for owner/repo), preferring them over the computer browser or web search; for a website without one, describe the pages and actions to take in the computer\'s browser. This prompt is all a future run knows, and it runs in new circumstances: write the user\'s lasting request in full, keeping every standing item and preference, including their swap and skip rules. A decision that only fit this time, such as an item swapped or skipped because it was out of stock or anything the user said "this week" or "this time" about, becomes a condition, never a permanent change ("skip sourdough if it is out of stock", not "skip sourdough").',
   },
   timezone: { type: "string", description: "IANA timezone (default: the user's timezone)." },
 };
@@ -113,7 +117,10 @@ const scheduleTimingSpecs = {
     enum: ["minutes", "hours", "days"],
     description: "Unit for every (minimum 1 minute).",
   },
-  runAt: { type: "string", description: "ISO datetime for a one-shot schedule." },
+  runAt: {
+    type: "string",
+    description: "ISO datetime for a one-shot schedule; without an offset, read in timezone.",
+  },
   delayMinutes: {
     type: "number",
     description: "Minutes from now for a one-shot schedule.",
@@ -148,6 +155,12 @@ const scheduleTimingSpecs = {
   },
 };
 
+const startAtSpec = {
+  type: "string",
+  description:
+    "ISO date or datetime a repeating schedule starts; the first run is the first match at or after it. Without an offset, read in timezone. If you already did this period's work yourself, set startAt so the first run does not repeat it.",
+};
+
 function scheduleCreateBranch(
   active: readonly (keyof typeof scheduleTimingSpecs)[],
   extraProperties: Record<string, unknown> = {},
@@ -157,6 +170,8 @@ function scheduleCreateBranch(
   for (const name of scheduleTimingNames) {
     properties[name] = activeNames.has(name) ? scheduleTimingSpecs[name] : blankScheduleTiming;
   }
+  properties.startAt =
+    activeNames.has("cron") || activeNames.has("every") ? startAtSpec : blankScheduleTiming;
   return {
     type: "object",
     properties,
@@ -237,7 +252,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "computer_act",
     description:
-      "Perform up to 24 ordered desktop actions on this bot's computer and return the resulting screen. Batch only predictable actions; stop before an outcome you need to inspect. Action kinds: click, move, down, up, type, key, scroll, wait, focus (raises the application's window, launching it if absent).",
+      "Perform up to 24 ordered desktop actions on this bot's computer and return the resulting screen. Batch only predictable actions; stop before an outcome you need to inspect. Action kinds: click, move, down, up, type, key, scroll, wait, focus (raises the application's window, launching it if absent). Scroll turns the wheel at x,y; put them on the area to scroll, as for a click. Without them it scrolls wherever the pointer is. Direction up, down, left or right; amount 1-20 wheel notches, default 3.",
     inputSchema: {
       type: "object",
       properties: {
@@ -268,7 +283,7 @@ export const builtinAgentTools: ConnectorTool[] = [
                   text: { type: "string" },
                   key: { type: "string" },
                   modifiers: { type: "array", items: { type: "string" } },
-                  direction: { type: "string", enum: ["up", "down"] },
+                  direction: { type: "string", enum: ["up", "down", "left", "right"] },
                   amount: { type: "number" },
                   ms: { type: "number" },
                   application: { type: "string" },
@@ -307,8 +322,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   },
   {
     name: "browser_act",
-    description:
-      'Click or fill page elements by ref from browser_snapshot (kinds: click, fill, type, upload, fill_secret). upload attaches your files to a "file upload" element; use it instead of clicking upload buttons. fill_secret types the username or password of a login saved with request_secret, only on the site it was saved for; you never see the value. type presses keys like a keyboard and replaces the field\'s text; use it for code boxes and fields that ignore fill. For a code split into one box per digit, type the whole code once into the first box, and to correct it type it again. Prefer this over computer_act for web pages. If the result includes fallback:"computer_act", use computer_act instead.',
+    description: `Click or fill page elements by ref from browser_snapshot (kinds: ${BROWSER_ACT_KINDS.join(", ")}). upload attaches your files to a "file upload" element; use it instead of clicking upload buttons. fill_secret types the username or password of a login saved with request_secret, only on the site it was saved for; you never see the value. type presses keys like a keyboard and replaces the field's text; use it for code boxes and fields that ignore fill. For a code split into one box per digit, type the whole code once into the first box, and to correct it type it again. Prefer this over computer_act for web pages. If the result includes fallback:"computer_act", use computer_act instead.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -319,7 +333,7 @@ export const builtinAgentTools: ConnectorTool[] = [
             properties: {
               kind: {
                 type: "string",
-                enum: ["click", "fill", "type", "upload", "fill_secret"],
+                enum: [...BROWSER_ACT_KINDS],
               },
               ref: { type: "string", description: "Element ref from browser_snapshot." },
               text: {
@@ -561,7 +575,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "add_mcp_server",
     description:
-      "Connect an MCP tool server to this Space when the user asks you to add one and provides the details (URL or command, optional token/headers/env). The server is created immediately and assigned to you. If it needs browser OAuth authorization, an approval card appears in the chat for the user to complete — tell them to click Authorize. Do not invent endpoints; only use details the user provided.",
+      "Connect an MCP tool server to this Space when the user asks you to add one and provides the details (URL or command, optional token/headers/env). The server is created immediately and an approval card appears in the chat; its tools reach you once the user approves it there. Do not invent endpoints; only use details the user provided.",
     inputSchema: {
       type: "object",
       properties: {
@@ -945,8 +959,16 @@ export const builtinAgentTools: ConnectorTool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        title: { type: "string", description: "Short ticket title." },
-        description: { type: "string", description: "Optional detail." },
+        title: {
+          type: "string",
+          maxLength: TICKET_TITLE_MAX_LENGTH,
+          description: "Short ticket title.",
+        },
+        description: {
+          type: "string",
+          maxLength: TICKET_DESCRIPTION_MAX_LENGTH,
+          description: "Optional detail.",
+        },
         priority: {
           type: "string",
           enum: TICKET_PRIORITIES,
@@ -967,8 +989,8 @@ export const builtinAgentTools: ConnectorTool[] = [
       type: "object",
       properties: {
         id: { type: "string", description: "Ticket id." },
-        title: { type: "string" },
-        description: { type: "string" },
+        title: { type: "string", maxLength: TICKET_TITLE_MAX_LENGTH },
+        description: { type: "string", maxLength: TICKET_DESCRIPTION_MAX_LENGTH },
         priority: { type: "string", enum: TICKET_PRIORITIES },
         status: { type: "string", enum: TICKET_STATUSES },
         ownerBotId: { type: "string" },
@@ -983,7 +1005,11 @@ export const builtinAgentTools: ConnectorTool[] = [
       type: "object",
       properties: {
         id: { type: "string", description: "Ticket id." },
-        body: { type: "string", description: "Comment text." },
+        body: {
+          type: "string",
+          maxLength: TICKET_COMMENT_MAX_LENGTH,
+          description: "Comment text.",
+        },
       },
       required: ["id", "body"],
     },
@@ -991,13 +1017,34 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "schedule_create",
     description:
-      'Create a reminder or recurring job for this bot. Use for "remind me in 10 minutes" or "every morning send a joke". Repeats: cron or every/unit (min 1 minute). One-shot: runAt, delayMinutes, or delaySeconds.',
+      'Create a reminder or recurring job for this bot. Use for "remind me in 10 minutes" or "every morning send a joke". Repeats: cron or every/unit (min 1 minute), optionally from startAt. One-shot: runAt, delayMinutes, or delaySeconds. A repeating job carries out the user\'s lasting request each time, not a copy of what was decided today.',
     inputSchema: scheduleCreateInputSchema,
   },
   {
     name: "schedule_list",
     description: "List this bot's active and inactive schedules (routines).",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "schedule_update",
+    description:
+      "Edit one of this bot's schedules by routineId instead of cancelling and recreating it. Send only what changes. Timing fields replace the current timing; startAt alone moves the next run of the current repeat. active false pauses it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        routineId: { type: "string" },
+        ...scheduleCreateProperties,
+        active: { type: "boolean" },
+        cron: scheduleTimingSpecs.cron,
+        every: scheduleTimingSpecs.every,
+        unit: scheduleTimingSpecs.unit,
+        startAt: startAtSpec,
+        runAt: scheduleTimingSpecs.runAt,
+        delayMinutes: scheduleTimingSpecs.delayMinutes,
+        delaySeconds: scheduleTimingSpecs.delaySeconds,
+      },
+      required: ["routineId"],
+    },
   },
   {
     name: "schedule_cancel",
@@ -1398,10 +1445,15 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "handoff_to_bot",
     description:
-      "In a group chat only: transfer a genuinely distinct next stage to another current member. Appends a visible handoff and starts that bot asynchronously. Do not hand a stage back merely to report or repeat the same work; post results in the shared thread.",
+      "Transfer a genuinely distinct next stage to another current group member. In a group, stay in that group. Outside a group, supply group_id from your groups list to coordinate there. Appends a visible handoff and starts that bot asynchronously. Do not hand a stage back merely to report or repeat the same work; post results in the shared thread.",
     inputSchema: {
       type: "object",
       properties: {
+        group_id: {
+          type: "string",
+          description:
+            "Explicit destination from your groups list; required outside a group, omitted in a group.",
+        },
         bot_id: { type: "string", description: "Target member bot id." },
         confirm_name: {
           type: "string",
