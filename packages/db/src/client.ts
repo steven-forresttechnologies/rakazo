@@ -69,6 +69,12 @@ export function createDb(
 ): { prisma: PrismaClient; pool: Pool; contentKeys: ContentKeyRing } {
   // Read first, so an invalid CONTENT_ENCRYPTION stops startup before any pool opens.
   const encryptWrites = options.encryptContent ?? resolveContentEncryption();
+  // Without the configured key manager, new space keys would quietly be wrapped by
+  // master keys held on this host.
+  if (!options.keyProvider && (process.env.MASTER_KEY_PROVIDER?.trim() || "local") !== "local")
+    throw new Error(
+      "MASTER_KEY_PROVIDER needs createDb(url, { keyProvider }) from @rakazo/adapters",
+    );
   const pool = createPool(connectionString, options);
   const keyPool = new Pool({
     connectionString,

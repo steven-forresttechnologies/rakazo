@@ -5,6 +5,7 @@ const SETTINGS_SECTIONS = [
   "memory",
   "voice",
   "confirmations",
+  "vault",
   "messaging",
   "usage",
   "computer",

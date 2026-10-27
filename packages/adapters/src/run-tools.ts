@@ -15,6 +15,7 @@ import { memoryTools } from "./run-tools-memory.js";
 import { messagingTools } from "./run-tools-messaging.js";
 import { secretTools } from "./run-tools-secrets.js";
 import { taskTools } from "./run-tools-tasks.js";
+import { USER_COMPUTER_SHELL_TOOL, userComputerShell } from "./run-tools-user-computer.js";
 
 const TOOL_HANDLERS = new Map<string, ToolHandler>([
   ...Object.entries(computerTools),
@@ -25,6 +26,7 @@ const TOOL_HANDLERS = new Map<string, ToolHandler>([
   ...Object.entries(messagingTools),
   ...Object.entries(secretTools),
   ...Object.entries(fleetTools),
+  [USER_COMPUTER_SHELL_TOOL, userComputerShell],
   ...[...PAGE_BROWSER_TOOL_NAMES].map((name) => [name, pageBrowserTool] as const),
 ]);
 

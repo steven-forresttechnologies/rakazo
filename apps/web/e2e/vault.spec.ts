@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
-import { captureScreenshot, completeOnboarding, createNamedBot, rpc, signup } from "./helpers";
+import { captureScreenshot, completeOnboarding, openUserSettings, rpc, signup } from "./helpers";
 
 // Fake values only: this spec proves the UI and API never echo a saved credential.
 const SENTINEL = "fake-bot-credential-values-never-leak";
@@ -11,35 +11,26 @@ const COMMAND_SENTINEL = "fake-command-variable-values-never-leak";
 const COMMAND_REPLACEMENT = "fake-command-variable-value-two";
 const COMMAND_CREDENTIAL_NAME = "netbird-setup-key";
 const COMMAND_VARIABLE_NAME = "$NETBIRD_SETUP_KEY";
+const account = { scope: "account" };
 
-test("bot and command credentials add, replace and remove without leaking values", async ({
+test("vault and command credentials add, replace and remove without leaking values", async ({
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `bot-credentials-${stamp}@rakazo.test`, "password12", "Bot Credentials");
+  await signup(page, `vault-${stamp}@rakazo.test`, "password12", "Vault");
   await completeOnboarding(page);
-  const botName = `Credentials ${stamp}`;
-  const botId = await createNamedBot(page, botName);
 
-  await page.locator("main").getByRole("button", { name: botName, exact: true }).click();
-  const settings = page.getByTestId("bot-settings");
-  await expect(settings).toBeVisible();
-  await settings.getByRole("button", { name: "Advanced", exact: true }).click();
-  const credentials = settings.getByTestId("bot-credentials");
+  const settings = await openUserSettings(page, "vault");
+  await expect(settings).toHaveAttribute("data-settings-section", "vault");
+  await expect(settings.getByRole("heading", { name: "Vault", exact: true })).toBeVisible();
+  const credentials = settings.getByTestId("vault");
   await expect(credentials).toBeVisible();
-  await expect(credentials.getByTestId("credential-add")).toBeVisible();
-
-  const add = credentials.getByRole("button", { name: "Add credential", exact: true });
-  await expect(add).toHaveText("");
   await expect(
-    credentials.getByRole("heading", { name: "Credentials", exact: true }),
+    credentials.getByRole("button", { name: "Add credential", exact: true }),
   ).toBeVisible();
-  const card = credentials.getByTestId("bot-credentials-card");
+  const card = credentials.getByTestId("vault-card");
   await expect(card).toHaveCount(0);
-  await add.hover();
-  await expect(
-    page.locator('[data-slot="tooltip-content"]').filter({ hasText: "Add credential" }),
-  ).toBeVisible();
+  await captureScreenshot(page, testInfo, "vault-empty");
 
   // Add: a password field holds the value, which is cleared once the save starts.
   await credentials.getByTestId("credential-add").click();
@@ -51,10 +42,10 @@ test("bot and command credentials add, replace and remove without leaking values
   await expect(valueInput).toHaveAttribute("type", "password");
   await expect(valueInput).toHaveAttribute("autocomplete", "new-password");
   await valueInput.fill(SENTINEL);
-  await captureScreenshot(page, testInfo, "bot-credentials-add");
+  await captureScreenshot(page, testInfo, "vault-add");
   await addForm.getByTestId("credential-add-save").click();
 
-  const row = credentials.getByTestId("bot-credential-row");
+  const row = credentials.getByTestId("vault-credential-row");
   await expect(row).toHaveCount(1);
   await expect(row).toHaveCSS("border-top-width", "0px");
   await expect(row).toHaveCSS("padding-left", "0px");
@@ -65,7 +56,7 @@ test("bot and command credentials add, replace and remove without leaking values
   await expect(addForm).toHaveCount(0);
 
   // The API returns metadata only, and no input still holds the value.
-  const listed = await rpc<Array<Record<string, unknown>>>(page, "botSecrets/list", { botId });
+  const listed = await rpc<Array<Record<string, unknown>>>(page, "vault/list", account);
   expect(listed).toHaveLength(1);
   expect(listed[0]).toMatchObject({
     name: CREDENTIAL_NAME,
@@ -78,7 +69,7 @@ test("bot and command credentials add, replace and remove without leaking values
 
   // Replace: keeps the destination, writes a new value, leaves the old one gone.
   const replaced = page.waitForResponse(
-    (response) => response.url().includes("/rpc/botSecrets/put") && response.ok(),
+    (response) => response.url().includes("/rpc/vault/put") && response.ok(),
   );
   await credentials.getByTestId(`credential-replace-${CREDENTIAL_NAME}`).click();
   await credentials.getByTestId("credential-replace-value").fill(REPLACEMENT);
@@ -88,20 +79,20 @@ test("bot and command credentials add, replace and remove without leaking values
   await expect(credentials.getByTestId("credential-replace-value")).toHaveCount(0);
   await expectNoLeakedInputValue(page, SENTINEL);
   await expectNoLeakedInputValue(page, REPLACEMENT);
-  await captureScreenshot(page, testInfo, "bot-credentials-replace");
+  await captureScreenshot(page, testInfo, "vault-replace");
 
   // Remove: needs an explicit confirm, then the empty state returns.
   await credentials.getByTestId(`credential-remove-${CREDENTIAL_NAME}`).click();
   await expect(credentials).toContainText(`Remove ${CREDENTIAL_NAME}?`);
   const removed = page.waitForResponse(
-    (response) => response.url().includes("/rpc/botSecrets/remove") && response.ok(),
+    (response) => response.url().includes("/rpc/vault/remove") && response.ok(),
   );
   await credentials.getByTestId(`credential-remove-confirm-${CREDENTIAL_NAME}`).click();
   await removed;
   await expect(row).toHaveCount(0);
   await expect(credentials.getByTestId("credential-add")).toBeVisible();
-  expect(await rpc<unknown[]>(page, "botSecrets/list", { botId })).toHaveLength(0);
-  await captureScreenshot(page, testInfo, "bot-credentials-removed");
+  expect(await rpc<unknown[]>(page, "vault/list", account)).toHaveLength(0);
+  await captureScreenshot(page, testInfo, "vault-removed");
 
   // Command add: choosing the command type removes the site field and shows the derived variable.
   await credentials.getByTestId("credential-add").click();
@@ -127,9 +118,7 @@ test("bot and command credentials add, replace and remove without leaking values
   await expect(commandForm).toHaveCount(0);
 
   // The API returns metadata only: the type, an empty origin, and no value.
-  const commandListed = await rpc<Array<Record<string, unknown>>>(page, "botSecrets/list", {
-    botId,
-  });
+  const commandListed = await rpc<Array<Record<string, unknown>>>(page, "vault/list", account);
   expect(commandListed).toHaveLength(1);
   expect(commandListed[0]).toMatchObject({
     name: COMMAND_CREDENTIAL_NAME,
@@ -142,7 +131,7 @@ test("bot and command credentials add, replace and remove without leaking values
 
   // Command replace: writes a new value on the same destination and leaves the old one gone.
   const commandReplaced = page.waitForResponse(
-    (response) => response.url().includes("/rpc/botSecrets/put") && response.ok(),
+    (response) => response.url().includes("/rpc/vault/put") && response.ok(),
   );
   await credentials.getByTestId(`credential-replace-${COMMAND_CREDENTIAL_NAME}`).click();
   await credentials.getByTestId("credential-replace-value").fill(COMMAND_REPLACEMENT);
@@ -159,13 +148,13 @@ test("bot and command credentials add, replace and remove without leaking values
   await credentials.getByTestId(`credential-remove-${COMMAND_CREDENTIAL_NAME}`).click();
   await expect(credentials).toContainText(`Remove ${COMMAND_CREDENTIAL_NAME}?`);
   const commandRemoved = page.waitForResponse(
-    (response) => response.url().includes("/rpc/botSecrets/remove") && response.ok(),
+    (response) => response.url().includes("/rpc/vault/remove") && response.ok(),
   );
   await credentials.getByTestId(`credential-remove-confirm-${COMMAND_CREDENTIAL_NAME}`).click();
   await commandRemoved;
   await expect(row).toHaveCount(0);
   await expect(credentials.getByTestId("credential-add")).toBeVisible();
-  expect(await rpc<unknown[]>(page, "botSecrets/list", { botId })).toHaveLength(0);
+  expect(await rpc<unknown[]>(page, "vault/list", account)).toHaveLength(0);
   await captureScreenshot(page, testInfo, "command-credentials-removed");
 });
 

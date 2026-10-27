@@ -400,6 +400,7 @@ it.each([false, true])(
         "Models",
         "Voice",
         "Approvals",
+        "Vault",
         "Integrations",
         "Messaging",
         "AI data sharing",
@@ -417,6 +418,7 @@ it.each([false, true])(
       for (const [title, href] of [
         ["Models", "/models"],
         ["Approvals", "/approvals"],
+        ["Vault", "/vault"],
         ["Messaging", "/messaging"],
       ]) {
         events.length = 0;

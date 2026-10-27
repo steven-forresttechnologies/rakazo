@@ -1192,6 +1192,11 @@ export interface BillingCreditCheckoutRequest {
   cancelUrl: string;
 }
 
+export interface BillingByokCheckoutRequest extends Omit<BillingCreditCheckoutRequest, "monthly"> {
+  /** Omitted when the customer has already used its trial. */
+  trialDays?: number;
+}
+
 export interface BillingSubscriptionSnapshot {
   creditAmountCents?: number;
   subscriptionId: string;

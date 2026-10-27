@@ -213,7 +213,11 @@ export default function BillingScreen() {
               }
             >
               <SettingsRow
-                title={t("Use my subscription or API key")}
+                title={
+                  status.byokPriceCents && status.trialAvailable
+                    ? t("Start {days}-day free trial", { days: status.trialDays })
+                    : t("Use my subscription or API key")
+                }
                 disabled={pending}
                 onPress={() =>
                   void action(async () => {

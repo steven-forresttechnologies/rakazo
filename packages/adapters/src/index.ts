@@ -6,6 +6,7 @@ export * from "./artifact-store-factory.js";
 export * from "./artifacts.js";
 export * from "./auto-review.js";
 export * from "./auto-review-factory.js";
+export * from "./aws-kms-key-provider.js";
 export * from "./background-job-handlers.js";
 export * from "./billing-emulator.js";
 export * from "./boat-sandbox.js";
@@ -17,6 +18,7 @@ export {
   listBotSecretMetadata,
   normalizeSecretDestination,
   pageUrlOrigin,
+  revealBotSecret,
   storeBotSecret,
 } from "./bot-secrets.js";
 export * from "./browser-emulator.js";
@@ -82,6 +84,7 @@ export * from "./integration-provider-settings.js";
 export * from "./jev-auto-review.js";
 export * from "./job-reconciler.js";
 export * from "./keenable-web.js";
+export * from "./key-provider-factory.js";
 export * from "./keyless-http-web.js";
 export * from "./kubernetes-sandbox.js";
 export * from "./mcp-connector.js";
@@ -165,6 +168,9 @@ export * from "./third-party-connector-emulator.js";
 export * from "./ticket-changes.js";
 export * from "./ticket-tools.js";
 export { dispatcherFetch } from "./undici-fetch.js";
+export * from "./user-device-emulator.js";
+export * from "./user-device-gateway.js";
+export * from "./user-device-protocol.js";
 export * from "./voice-factory.js";
 export * from "./wakeup.js";
 export * from "./web-limits.js";

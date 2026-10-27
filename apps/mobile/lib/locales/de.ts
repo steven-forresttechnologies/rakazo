@@ -874,6 +874,8 @@ export const DE_MESSAGES: Record<string, string> = {
   "Default ({level})": "Standard ({level})",
   "Disconnected {provider}.": "{provider} getrennt.",
   "Sign in again": "Erneut anmelden",
+  "Confirm it's you": "Bestätige, dass du es bist",
+  "Email me a code": "Code per E-Mail senden",
   "Thinking: {level}": "Denkmodus: {level}",
   "Waiting for sign-in — the code expires in about {minutes} minutes.":
     "Warte auf Anmeldung — der Code läuft in etwa {minutes} Minuten ab.",
@@ -1038,6 +1040,7 @@ export const DE_MESSAGES: Record<string, string> = {
   "Free plan ends": "Kostenloser Tarif endet",
   Subscribe: "Abonnieren",
   "Use my subscription or API key": "Mein Abo oder meinen API-Schlüssel verwenden",
+  "Start {days}-day free trial": "Kostenlose {days}-Tage-Testphase starten",
   "Monthly credits expire at renewal. Top-ups do not expire.":
     "Monatliches Guthaben verfällt bei Verlängerung. Einmalige Aufladungen verfallen nicht.",
   "Use Rakazo credits": "Rakazo-Guthaben verwenden",
@@ -1120,4 +1123,25 @@ export const DE_MESSAGES: Record<string, string> = {
   "{from} to {to}": "{from} bis {to}",
   "Every {day}": "Jeden {day}",
   "Every {days} and {last}": "Jeden {days} und {last}",
+  "Run history": "Ausführungsverlauf",
+  "No runs yet": "Noch keine Ausführungen",
+  "Load older runs": "Ältere Ausführungen laden",
+  "Could not load run history": "Ausführungsverlauf konnte nicht geladen werden",
+  Vault: "Tresor",
+  "Add credential": "Zugangsdaten hinzufügen",
+  "Replace value": "Wert ersetzen",
+  "Remove {name}?": "{name} entfernen?",
+  "Could not save the credential": "Zugangsdaten konnten nicht gespeichert werden",
+  "Could not remove the credential": "Zugangsdaten konnten nicht entfernt werden",
+  Type: "Typ",
+  Site: "Website",
+  Value: "Wert",
+  "Custom header": "Eigener Header",
+  "Basic auth": "Basic-Auth",
+  "Website login": "Website-Anmeldung",
+  "Use lowercase letters, numbers, - and _, starting with a letter.":
+    "Verwende Kleinbuchstaben, Ziffern, - und _, beginnend mit einem Buchstaben.",
+  "{variable} is reserved. Choose another name.":
+    "{variable} ist reserviert. Wähle einen anderen Namen.",
+  "Delete this Space's credentials?": "Zugangsdaten dieses Space löschen?",
 };

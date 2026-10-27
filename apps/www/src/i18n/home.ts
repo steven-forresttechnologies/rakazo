@@ -460,6 +460,11 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
           answer:
             "Yes. Point a bot at a local OpenAI-compatible server such as Ollama or LM Studio. Each bot can use a different model.",
         },
+        {
+          question: "What does the hosted plan include?",
+          answer:
+            "Up to 100 computer-hours a month and 5 computers running at once. That is more than enough for most people, and there are no overage charges.",
+        },
       ],
     },
     openSource: {
@@ -583,6 +588,11 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
           answer:
             "Ja. Richte einen Bot auf einen lokalen OpenAI-kompatiblen Server wie Ollama oder LM Studio. Jeder Bot kann ein anderes Modell nutzen.",
         },
+        {
+          question: "Was ist im gehosteten Plan enthalten?",
+          answer:
+            "Bis zu 100 Computerstunden im Monat und 5 gleichzeitig laufende Computer. Das reicht den meisten mehr als aus, und es gibt keine Zusatzkosten.",
+        },
       ],
     },
     openSource: {
@@ -704,6 +714,11 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
           question: "로컬 모델을 쓸 수 있나요?",
           answer:
             "네. Ollama나 LM Studio 같은 로컬 OpenAI 호환 서버에 봇을 연결하세요. 봇마다 다른 모델을 쓸 수 있습니다.",
+        },
+        {
+          question: "호스팅 플랜에는 무엇이 포함되나요?",
+          answer:
+            "월 최대 100 컴퓨터 시간과 동시에 실행되는 컴퓨터 5대가 포함됩니다. 대부분의 사용자에게 충분하며 초과 요금은 없습니다.",
         },
       ],
     },
@@ -827,6 +842,11 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
           answer:
             "可以。把 Bot 指向 Ollama 或 LM Studio 这类本地 OpenAI 兼容服务。每个 Bot 可以使用不同的模型。",
         },
+        {
+          question: "托管套餐包含什么？",
+          answer:
+            "每月最多 100 个计算机小时，最多同时运行 5 台计算机。对大多数人来说绰绰有余，并且没有超额费用。",
+        },
       ],
     },
     openSource: {
@@ -949,6 +969,11 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
           question: "ローカルモデルを使えますか？",
           answer:
             "はい。Ollama や LM Studio などのローカルの OpenAI 互換サーバーにボットを接続できます。ボットごとに別のモデルを使えます。",
+        },
+        {
+          question: "ホスト型プランには何が含まれますか？",
+          answer:
+            "月に最大 100 コンピューター時間、同時に 5 台までのコンピューターを使えます。ほとんどの人には十分で、超過料金はありません。",
         },
       ],
     },

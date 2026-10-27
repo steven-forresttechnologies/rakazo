@@ -179,6 +179,8 @@ export interface RunSource {
   callEndRun: boolean;
   callClientNonce: string | null;
   peerMessage: Awaited<ReturnType<typeof loadBotMessageContext>>;
+  /** Whose own computer user_computer_shell may reach (see userComputerOwner). */
+  userComputerOwner: string | undefined;
 }
 
 export interface RunTools {

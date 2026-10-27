@@ -277,6 +277,29 @@ it("sizes approval buttons like the other card buttons", async () => {
   }
 });
 
+it("says a user's-computer approval allows the rest of the chat", async () => {
+  const block: AskBlock = {
+    kind: "ask",
+    approvalEffectId: "effect-1",
+    text: "Run on your computer?",
+    status: "pending",
+    actions: [
+      { id: "allow", label: "Allow for this chat" },
+      { id: "deny", label: "Deny" },
+    ],
+  };
+  await render({ ...block, detail: "hostname", detailFormat: "code" });
+  const detail = container.querySelector('[data-testid="ask-detail"]');
+  expect(detail?.textContent).toBe("hostname");
+  // The card is muted, so the command sits on the page background to read as a snippet.
+  expect(detail?.classList.contains("bg-background")).toBe(true);
+  expect(detail?.classList.contains("bg-muted")).toBe(false);
+  expect(button("Allow for this chat")).toBeTruthy();
+  expect(button("Allow once")).toBeUndefined();
+  await render({ ...block, status: "answered", answer: "allow" });
+  expect(container.textContent).toContain("Allowed for this chat");
+});
+
 it("gives onboarding choices the same lettered rows as questions", async () => {
   await act(async () =>
     root.render(

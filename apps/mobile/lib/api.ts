@@ -1687,9 +1687,9 @@ export async function fetchAccountSecurity(): Promise<AccountSecurity> {
   }
 }
 
-export async function requestAccountDeletionCode(): Promise<void> {
+async function postSignedInAuth(path: string, payload: Record<string, string> = {}): Promise<void> {
   const { response, body, invalidJson } = await fetchMobileJson<unknown>(
-    `${currentApiBase()}/api/auth/request-account-deletion`,
+    `${currentApiBase()}/api/auth${path}`,
     {
       method: "POST",
       headers: {
@@ -1697,7 +1697,7 @@ export async function requestAccountDeletionCode(): Promise<void> {
         origin: "rakazo://",
         ...(await authHeaders()),
       },
-      body: "{}",
+      body: JSON.stringify(payload),
     },
     null,
   );
@@ -1706,3 +1706,12 @@ export async function requestAccountDeletionCode(): Promise<void> {
       authResponseErrorText(response.status, body, invalidJson, t("Could not continue")),
     );
 }
+
+export const requestAccountDeletionCode = () => postSignedInAuth("/request-account-deletion");
+
+/** Emails a confirmation code to an account without a password. */
+export const requestIdentityCode = () => postSignedInAuth("/request-identity-code");
+
+/** Confirms this session's identity for the next few minutes. */
+export const confirmIdentity = (proof: { password: string } | { code: string }) =>
+  postSignedInAuth("/confirm-identity", proof);

@@ -665,6 +665,7 @@ export default function Account() {
               { title: t("Models"), href: "/models" },
               { title: t("Voice"), href: "/voice" },
               { title: t("Approvals"), href: "/approvals" },
+              { title: t("Vault"), href: "/vault" },
               { title: t("Integrations"), href: "/integrations" },
               { title: t("Messaging"), href: "/messaging" },
               { title: t("AI data sharing"), href: "/ai-data-sharing" },

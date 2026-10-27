@@ -10,6 +10,7 @@ import type {
   AutoReviewResult,
   BackgroundJob,
   BackgroundJobHandlers,
+  BillingByokCheckoutRequest,
   BillingCheckoutRequest,
   BillingCreditCheckoutRequest,
   BillingCreditPurchase,
@@ -451,9 +452,7 @@ export interface BillingProvider {
   listCreditPurchases?(customerId: string): Promise<BillingCreditPurchase[]>;
   setMonthlyCredits?(customerId: string, amountCents: number): Promise<void>;
   /** Flat monthly own-key plan: access without credits. */
-  createByokCheckout?(
-    input: Omit<BillingCreditCheckoutRequest, "monthly">,
-  ): Promise<{ url: string }>;
+  createByokCheckout?(input: BillingByokCheckoutRequest): Promise<{ url: string }>;
   /** Ends every live own-key plan at its period end. */
   endByokPlans?(customerId: string): Promise<void>;
   describe(): AdapterDescriptor<{ trials: boolean; portal: boolean; modelCredits?: boolean }>;

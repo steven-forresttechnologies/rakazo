@@ -124,6 +124,8 @@ export function describeToolActivity(toolName: string, args: unknown): string {
     return text.length > ACTIVITY_DETAIL_LIMIT ? `${text.slice(0, ACTIVITY_DETAIL_LIMIT)}…` : text;
   };
   if (toolName === "shell") return `Running: ${detail(record.command)}`;
+  if (toolName === "user_computer_shell")
+    return `Running on your computer: ${detail(record.command)}`;
   if (toolName === "read_file") return `Reading ${detail(record.path)}`;
   if (toolName === "write_file") return `Writing ${detail(record.path)}`;
   if (toolName === "list_files") return `Listing ${detail(record.path ?? ".")}`;
@@ -299,10 +301,10 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
           uri: raw.uri ? String(raw.uri) : "",
         };
       }
-      if (tool.name === "shell") {
+      if (tool.name === "shell" || tool.name === "user_computer_shell") {
         return {
           command: String(raw.command ?? ""),
-          // The executor chooses the bot-scoped default, including Team workspaces.
+          // The executor chooses the default: the bot's folder, or the user's home.
           ...(raw.cwd ? { cwd: String(raw.cwd) } : {}),
         };
       }

@@ -217,6 +217,15 @@ export function inferScript(
       },
     ];
   }
+  if (lower.includes("run hostname on my computer")) {
+    return [
+      {
+        assistant: "checking your computer's name.",
+        toolCalls: [{ name: "user_computer_shell", args: { command: "hostname" } }],
+        complete: true,
+      },
+    ];
+  }
   if (lower.includes("message the bot named") || lower.includes("message bot named")) {
     const name = namedBot(prompt) ?? "Peer";
     const message =

@@ -98,8 +98,6 @@ test("choose your own key or monthly credits, then add a one-time top-up", async
     funding: null,
     balanceUsd: 0,
     monthlyAmountCents: null,
-    trialAvailable: false,
-    trialDays: 0,
   });
   await page.route("**/rpc/billing/status", (route) => route.fulfill({ json: { json: status } }));
   await page.reload();
@@ -108,8 +106,9 @@ test("choose your own key or monthly credits, then add a one-time top-up", async
   await expect(
     page.getByText("Works with your ChatGPT or Claude plan.", { exact: true }),
   ).toBeVisible();
+  // Only the own-key plan has a trial; credits are resold at cost.
   await expect(
-    page.getByRole("button", { name: "Subscribe with your own AI", exact: true }),
+    page.getByRole("button", { name: "Start 7-day free trial", exact: true }),
   ).toBeVisible();
   const planSelect = page.getByRole("combobox", { name: "Monthly credits" });
   await expect(planSelect).toHaveCSS("height", "48px");
@@ -186,6 +185,7 @@ test("choose your own key or monthly credits, then add a one-time top-up", async
   // Own-key organizations from before the plan was paid see when their free period ends.
   status = billingStatus({
     access: true,
+    trialAvailable: false,
     creditPurchasesEnabled: true,
     byokPriceCents: 1000,
     byokFreeUntil: "2030-01-15T12:00:00.000Z",

@@ -94,3 +94,17 @@ export function accountDeletionEmail(email: string, code: string): Promise<Trans
     </>,
   );
 }
+
+export function identityCodeEmail(email: string, code: string): Promise<TransactionalEmail> {
+  return message(
+    email,
+    "Your Rakazo confirmation code",
+    <>
+      <Text>Enter this code in Rakazo to confirm it's you:</Text>
+      <Text>
+        <strong>{code}</strong>
+      </Text>
+      <Text>This code expires in ten minutes. If you did not request it, ignore this email.</Text>
+    </>,
+  );
+}

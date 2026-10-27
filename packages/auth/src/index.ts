@@ -30,6 +30,7 @@ import {
 } from "./account-security.js";
 import { breachedPasswordCheck } from "./breached-password.js";
 import { passwordResetEmail, signInCodeEmail, verificationEmail } from "./email.js";
+import { hasRecentIdentityConfirmation, identityConfirmation } from "./identity-confirmation.js";
 import type { OidcConfig } from "./oidc.js";
 import { isCurrentOidcAccount, oidcDiscovery } from "./oidc.js";
 import { passkeyRelyingParty } from "./passkey.js";
@@ -116,6 +117,8 @@ export function authRateLimitOptions(nodeEnv = process.env.NODE_ENV) {
     customRules: {
       ...Object.fromEntries(CREDENTIAL_PATHS.map((path) => [path, rule])),
       "/request-account-deletion": { window: 600, max: 3 },
+      "/request-identity-code": { window: 600, max: 3 },
+      "/confirm-identity": rule,
       "/passkey/verify-authentication": rule,
       "/passkey/verify-registration": rule,
       // Sign-in pages request a challenge on load for passkey autofill.
@@ -261,6 +264,7 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
       signedBearer,
       expo(),
       accountSecurity(env.email, env.oidc?.name, env.oidc?.issuer, env.passwordAuth !== false),
+      identityConfirmation(env.email),
       ...(discovery ? [discovery.plugin] : []),
       ...(emailCodeSignIn
         ? [
@@ -526,6 +530,11 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
                 value: session.userId,
                 expiresAt: new Date(context.reauthExpiresAt),
               });
+              await recordSecurityEvent({
+                type: "auth.identity.confirmed",
+                userId: session.userId,
+                metadata: { method: "sso" },
+              });
             }
             const previous = replacedSession(ctx);
             if (previous) await env.afterReplaceSession?.(previous, session);
@@ -595,6 +604,9 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
     encryptStoredOAuthTokens: async () => encryptStoredOAuthTokens(prisma, await tokenKey()),
     ssoAvailability: () => discovery?.availability(),
     passkeyRpId: relyingParty?.rpID ?? null,
+    /** Whether this session confirmed its identity within the last few minutes. */
+    hasRecentIdentityConfirmation: async (session: { sessionId: string; userId: string }) =>
+      hasRecentIdentityConfirmation((await auth.$context).internalAdapter, session),
     disposeOidcDiscovery: () => discovery?.dispose(),
   });
 }

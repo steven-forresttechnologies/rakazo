@@ -49,7 +49,6 @@ import { useSpaceQueries } from "../../lib/query";
 import { errorText } from "../../lib/user-error";
 import { AgentImportUndo } from "./agent-import-undo";
 import { AvatarStudioPopover } from "./avatar-studio-popover";
-import { BotCredentialsSection } from "./bot-credentials";
 import { ChatModelPicker } from "./chat-model-picker";
 
 const ScratchpadSection = lazyComponent(() =>
@@ -796,7 +795,6 @@ export function BotSettings({
                 </div>
               </section>
             </SettingsGroup>
-            <BotCredentialsSection botId={bot.id} />
             <ErrorBoundary fallback={<SectionLoadFailed />}>
               <Suspense fallback={null}>
                 <KnowledgeSection botId={bot.id} skillsOnly />

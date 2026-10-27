@@ -817,6 +817,8 @@ export const JA_MESSAGES: Record<string, string> = {
   "Default ({level})": "デフォルト（{level}）",
   "Disconnected {provider}.": "{provider}を切断しました。",
   "Sign in again": "再度ログイン",
+  "Confirm it's you": "本人確認",
+  "Email me a code": "メールでコードを送信",
   "Thinking: {level}": "思考: {level}",
   "Waiting for sign-in — the code expires in about {minutes} minutes.":
     "ログインを待機中です。コードの有効期限は約{minutes}分です。",
@@ -979,6 +981,7 @@ export const JA_MESSAGES: Record<string, string> = {
   "Free plan ends": "無料プランの終了日",
   Subscribe: "登録する",
   "Use my subscription or API key": "自分のサブスクリプションまたはAPIキーを使用",
+  "Start {days}-day free trial": "{days}日間の無料トライアルを開始",
   "Monthly credits expire at renewal. Top-ups do not expire.":
     "月間クレジットは更新時に失効します。追加購入分は失効しません。",
   "Use Rakazo credits": "Rakazoクレジットを使用",
@@ -1105,4 +1108,25 @@ export const JA_MESSAGES: Record<string, string> = {
   "{from} to {to}": "{from}〜{to}",
   "Every {day}": "毎週{day}",
   "Every {days} and {last}": "毎週{days}と{last}",
+  "Run history": "実行履歴",
+  "No runs yet": "実行はまだありません",
+  "Load older runs": "過去の実行を読み込む",
+  "Could not load run history": "実行履歴を読み込めませんでした",
+  Vault: "保管庫",
+  "Add credential": "認証情報を追加",
+  "Replace value": "値を置き換え",
+  "Remove {name}?": "{name}を削除しますか？",
+  "Could not save the credential": "認証情報を保存できませんでした",
+  "Could not remove the credential": "認証情報を削除できませんでした",
+  Type: "種類",
+  Site: "サイト",
+  Value: "値",
+  "Custom header": "カスタムヘッダー",
+  "Basic auth": "Basic認証",
+  "Website login": "Webサイトのログイン",
+  "Use lowercase letters, numbers, - and _, starting with a letter.":
+    "小文字、数字、-、_ を使い、文字で始めてください。",
+  "{variable} is reserved. Choose another name.":
+    "{variable} は予約されています。別の名前を選んでください。",
+  "Delete this Space's credentials?": "このスペースの認証情報を削除しますか？",
 };

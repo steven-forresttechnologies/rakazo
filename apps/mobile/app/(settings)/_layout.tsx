@@ -83,6 +83,13 @@ export default function SettingsLayout() {
         }}
       />
       <Stack.Screen
+        name="vault"
+        options={{
+          ...glassHeaderOptions(t("Vault")),
+          contentStyle: { backgroundColor: native.groupedPage },
+        }}
+      />
+      <Stack.Screen
         name="space"
         // Named after the Space it opened from.
         options={({ route }) => ({

@@ -465,11 +465,11 @@ export interface ComposeUpdatePlanInput {
 /**
  * Ordered work for one Compose update.
  *
- * Migrations are absent on purpose. The `api` service runs `prisma migrate deploy` as the first
- * thing in its own start command, so a recreate already orders them correctly: Compose stops the
- * old container, the new one migrates with the new code, then serves. Running migrations from here
- * would instead apply the new schema while the old process is still answering requests, which is
- * the window this ordering exists to close.
+ * Migrations are absent on purpose. The `api` service depends on the one-shot `migrate` service,
+ * so a recreate already orders them correctly: Compose stops the old API, `migrate` applies the
+ * new code's migrations, then the new API serves. Running migrations from here would instead apply
+ * the new schema while the old process is still answering requests, which is the window this
+ * ordering exists to close.
  */
 export function composeUpdatePlan(input: ComposeUpdatePlanInput): ComposeUpdateStep[] {
   const steps: ComposeUpdateStep[] = [];
@@ -562,15 +562,19 @@ export function upsertEnvAssignments(
     if (!ENV_VALUE.test(value)) throw new Error(`Refusing to write the value of ${key}.`);
   }
   const newline = contents.includes("\r\n") ? "\r\n" : "\n";
-  const lines = contents.split(/\r?\n/);
   const pending = new Map(Object.entries(assignments));
-  const next = lines.map((line) => {
-    const key = line.match(/^([A-Z][A-Z0-9_]*)=/)?.[1];
-    if (key === undefined || !Object.hasOwn(assignments, key)) return line;
-    const value = assignments[key] as string;
-    pending.delete(key);
-    return `${key}=${value}`;
-  });
+  // Match whole assignments so quoted multiline values cannot expose apparent managed keys.
+  const next = contents
+    .replace(
+      /^(\uFEFF?)[^\S\r\n]*(?:export[^\S\r\n]+)?([\w.-]+)[^\S\r\n]*(?:=[^\S\r\n]*|:[^\S\r\n]+)(?:'(?:\\[\s\S]|[^'\\])*'|"(?:\\[\s\S]|[^"\\])*"|`(?:\\[\s\S]|[^`\\])*`|[^\r\n]*)[^\r\n]*/gm,
+      (line, bom: string, key: string) => {
+        if (!Object.hasOwn(assignments, key)) return line;
+        const value = assignments[key] as string;
+        pending.delete(key);
+        return `${bom}${key}=${value}`;
+      },
+    )
+    .split(/\r?\n/);
   if (pending.size > 0) {
     while (next.length > 0 && next[next.length - 1] === "") next.pop();
     if (next.length > 0) next.push("");

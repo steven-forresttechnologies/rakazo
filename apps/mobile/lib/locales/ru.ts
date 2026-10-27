@@ -850,6 +850,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Default ({level})": "По умолчанию ({level})",
   "Disconnected {provider}.": "{provider} отключён.",
   "Sign in again": "Войти снова",
+  "Confirm it's you": "Подтвердите, что это вы",
+  "Email me a code": "Отправить код на почту",
   "Thinking: {level}": "Рассуждение: {level}",
   "Waiting for sign-in — the code expires in about {minutes} minutes.":
     "Ожидание входа — срок действия кода истекает примерно через {minutes} мин.",
@@ -1031,6 +1033,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Free plan ends": "Бесплатный тариф до",
   Subscribe: "Оформить подписку",
   "Use my subscription or API key": "Использовать свою подписку или API-ключ",
+  "Start {days}-day free trial": "Начать бесплатный пробный период на {days} дн.",
   "Monthly credits expire at renewal. Top-ups do not expire.":
     "Ежемесячные кредиты истекают при продлении. Разовые пополнения не сгорают.",
   "Use Rakazo credits": "Использовать кредиты Rakazo",
@@ -1114,4 +1117,25 @@ export const RU_MESSAGES: Record<string, string> = {
   "{from} to {to}": "{from} — {to}",
   "Every {day}": "Каждую неделю: {day}",
   "Every {days} and {last}": "Каждую неделю: {days} и {last}",
+  "Run history": "История запусков",
+  "No runs yet": "Запусков пока нет",
+  "Load older runs": "Загрузить более ранние запуски",
+  "Could not load run history": "Не удалось загрузить историю запусков",
+  Vault: "Хранилище",
+  "Add credential": "Добавить учетные данные",
+  "Replace value": "Заменить значение",
+  "Remove {name}?": "Удалить {name}?",
+  "Could not save the credential": "Не удалось сохранить учетные данные",
+  "Could not remove the credential": "Не удалось удалить учетные данные",
+  Type: "Тип",
+  Site: "Сайт",
+  Value: "Значение",
+  "Custom header": "Свой заголовок",
+  "Basic auth": "Базовая аутентификация",
+  "Website login": "Вход на сайт",
+  "Use lowercase letters, numbers, - and _, starting with a letter.":
+    "Используйте строчные буквы, цифры, - и _, начиная с буквы.",
+  "{variable} is reserved. Choose another name.":
+    "{variable} зарезервировано. Выберите другое имя.",
+  "Delete this Space's credentials?": "Удалить учетные данные этого пространства?",
 };

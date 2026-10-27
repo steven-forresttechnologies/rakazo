@@ -10,6 +10,7 @@ import SpaceSettings from "../app/(settings)/space";
 const state = vi.hoisted(() => ({
   push: vi.fn(),
   rpc: vi.fn(),
+  alert: vi.fn(),
   overrides: [] as string[],
   focusCount: 0,
 }));
@@ -57,6 +58,7 @@ vi.mock("expo-router", () => ({
   useRouter: () => ({ push: state.push }),
 }));
 vi.mock("react-native", () => ({
+  Alert: { alert: state.alert },
   ScrollView: element("div"),
   View: element("div"),
   StyleSheet: { create: <T,>(styles: T) => styles },
@@ -103,6 +105,7 @@ beforeEach(async () => {
   state.overrides = [];
   state.focusCount = 0;
   state.push.mockReset();
+  state.alert.mockReset();
   state.rpc
     .mockReset()
     .mockImplementation(async (proc: string, input?: Record<string, unknown>) => {
@@ -129,7 +132,7 @@ afterEach(() => {
 
 it("follows the account until a setting is customized, then opens the same screen for the Space", async () => {
   expect(state.rpc).toHaveBeenCalledWith("spaceSettings/overrides", undefined, spaceContext);
-  for (const name of ["Models", "Voice", "Approvals"])
+  for (const name of ["Models", "Voice", "Approvals", "Vault"])
     expect(control(`Customize ${name}`)?.checked).toBe(false);
   expect(container.querySelector("button")).toBeNull();
 
@@ -172,6 +175,53 @@ it("opens the Approvals screen for the Space once approvals are customized", asy
     pathname: "/approvals",
     params: { spaceId: "space-other" },
   });
+});
+
+type AlertButton = { text: string; style?: string; onPress?: () => void };
+const alertButton = (text: string) =>
+  (state.alert.mock.lastCall![2] as AlertButton[]).find((button) => button.text === text)!;
+
+it("opens the Vault for the Space, and deletes its credentials only once confirmed", async () => {
+  await act(async () => control("Customize Vault")!.click());
+  expect(state.rpc).toHaveBeenCalledWith(
+    "spaceSettings/setOverride",
+    { setting: "credentials", enabled: true },
+    spaceContext,
+  );
+  expect(state.push).toHaveBeenCalledWith({
+    pathname: "/vault",
+    params: { spaceId: "space-other" },
+  });
+  state.rpc.mockClear();
+
+  await act(async () => control("Customize Vault")!.click());
+  expect(state.alert).toHaveBeenCalledWith(
+    "Delete this Space's credentials?",
+    undefined,
+    expect.any(Array),
+  );
+  expect(alertButton("Delete").style).toBe("destructive");
+  await act(async () => alertButton("Cancel").onPress?.());
+  expect(state.rpc).not.toHaveBeenCalled();
+  expect(control("Customize Vault")?.checked).toBe(true);
+
+  await act(async () => control("Customize Vault")!.click());
+  await act(async () => alertButton("Delete").onPress?.());
+  expect(state.rpc).toHaveBeenCalledWith(
+    "spaceSettings/setOverride",
+    { setting: "credentials", enabled: false },
+    spaceContext,
+  );
+  expect(control("Customize Vault")?.checked).toBe(false);
+});
+
+it("turns other settings off without asking", async () => {
+  state.overrides = ["voice"];
+  state.focusCount += 1;
+  await act(async () => root.render(createElement(SpaceSettings)));
+  await act(async () => control("Customize Voice")!.click());
+  expect(state.alert).not.toHaveBeenCalled();
+  expect(control("Customize Voice")?.checked).toBe(false);
 });
 
 function retry() {

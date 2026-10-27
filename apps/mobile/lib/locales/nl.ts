@@ -829,6 +829,8 @@ export const NL_MESSAGES: Record<string, string> = {
   "Default ({level})": "Standaard ({level})",
   "Disconnected {provider}.": "{provider} losgekoppeld.",
   "Sign in again": "Opnieuw aanmelden",
+  "Confirm it's you": "Bevestig dat jij het bent",
+  "Email me a code": "Mail me een code",
   "Thinking: {level}": "Denkt: {level}",
   "Waiting for sign-in — the code expires in about {minutes} minutes.":
     "Wachten op aanmelding — de code verloopt over ongeveer {minutes} minuten.",
@@ -990,6 +992,7 @@ export const NL_MESSAGES: Record<string, string> = {
   "Free plan ends": "Gratis abonnement eindigt",
   Subscribe: "Abonneren",
   "Use my subscription or API key": "Mijn abonnement of API-sleutel gebruiken",
+  "Start {days}-day free trial": "Start een gratis proefperiode van {days} dagen",
   "Monthly credits expire at renewal. Top-ups do not expire.":
     "Maandelijks tegoed vervalt bij verlenging. Los gekocht tegoed verloopt niet.",
   "Use Rakazo credits": "Rakazo-tegoed gebruiken",
@@ -1072,4 +1075,25 @@ export const NL_MESSAGES: Record<string, string> = {
   "{from} to {to}": "{from} tot {to}",
   "Every {day}": "Elke {day}",
   "Every {days} and {last}": "Elke {days} en {last}",
+  "Run history": "Rungeschiedenis",
+  "No runs yet": "Nog geen runs",
+  "Load older runs": "Oudere runs laden",
+  "Could not load run history": "Rungeschiedenis laden mislukt",
+  Vault: "Kluis",
+  "Add credential": "Gegeven toevoegen",
+  "Replace value": "Waarde vervangen",
+  "Remove {name}?": "{name} verwijderen?",
+  "Could not save the credential": "De gegevens opslaan mislukt",
+  "Could not remove the credential": "De gegevens verwijderen mislukt",
+  Type: "Type",
+  Site: "Site",
+  Value: "Waarde",
+  "Custom header": "Aangepaste header",
+  "Basic auth": "Basisauthenticatie",
+  "Website login": "Websiteaanmelding",
+  "Use lowercase letters, numbers, - and _, starting with a letter.":
+    "Gebruik kleine letters, cijfers, - en _, beginnend met een letter.",
+  "{variable} is reserved. Choose another name.":
+    "{variable} is gereserveerd. Kies een andere naam.",
+  "Delete this Space's credentials?": "Inloggegevens van deze Space verwijderen?",
 };

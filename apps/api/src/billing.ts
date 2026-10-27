@@ -53,6 +53,17 @@ export interface BillingService {
   cancelForDeletedUser(userId: string): Promise<void>;
 }
 
+/**
+ * Only the own-key plan has a trial: credits are resold at cost. An organization that has
+ * subscribed before, or was given a free own-key period, has had its trial.
+ */
+function byokTrialAvailable(
+  account: { subscribedAt: Date | null } | null,
+  credits: { byokFreeUntil: Date | null },
+) {
+  return !account?.subscribedAt && !credits.byokFreeUntil;
+}
+
 export function createBillingService(deps: {
   prisma: PrismaClient;
   provider: BillingProvider;
@@ -203,12 +214,16 @@ export function createBillingService(deps: {
   async function byokCheckout(actor: Actor, organizationId: string) {
     const amountCents = BYOK_MONTHLY_PRICE_CENTS;
     if (amountCents === null || !provider.createByokCheckout) throw new ORPCError("NOT_FOUND");
-    const account = await billingAccountFor(actor, organizationId);
+    const [account, credits] = await Promise.all([
+      billingAccountFor(actor, organizationId),
+      creditAccount(prisma, organizationId),
+    ]);
     try {
       return await openCheckout(actor, account, true, (customerId) =>
         provider.createByokCheckout!({
           customerId,
           amountCents,
+          ...(byokTrialAvailable(account, credits) ? { trialDays: TRIAL_DAYS } : {}),
           successUrl: `${deps.webOrigin}${BILLING_RETURN_PATH}`,
           cancelUrl: appUrl,
         }),
@@ -318,8 +333,8 @@ export function createBillingService(deps: {
           byokPriceCents: BYOK_MONTHLY_PRICE_CENTS,
           byokFreeUntil: freeUntil?.toISOString() ?? null,
           canManage: isOwner,
-          trialAvailable: false,
-          trialDays: 0,
+          trialAvailable: BYOK_MONTHLY_PRICE_CENTS !== null && byokTrialAvailable(account, credits),
+          trialDays: TRIAL_DAYS,
           state: (account?.status ?? "none") as BillingStatus["state"],
           price: account?.creditAmountCents
             ? {
@@ -330,7 +345,7 @@ export function createBillingService(deps: {
               }
             : null,
           seats: 1,
-          trialEndsAt: null,
+          trialEndsAt: account?.trialEndsAt?.toISOString() ?? null,
           currentPeriodEndsAt: account?.currentPeriodEndsAt?.toISOString() ?? null,
           cancelAtPeriodEnd: account?.cancelAtPeriodEnd ?? false,
           hasCustomer: Boolean(account),

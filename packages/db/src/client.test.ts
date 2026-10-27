@@ -38,6 +38,17 @@ describe("createDb", () => {
     pools.push(pool);
     expect(pool.options.max).toBe(4);
   });
+
+  it("refuses local master keys when a key manager is configured", () => {
+    vi.stubEnv("MASTER_KEY_PROVIDER", "aws-kms");
+    try {
+      expect(() => createDb("postgres://rakazo:rakazo@127.0.0.1:9/rakazo")).toThrow(
+        "MASTER_KEY_PROVIDER needs createDb(url, { keyProvider })",
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });
 
 describe("parsePositiveInteger", () => {

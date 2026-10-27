@@ -195,7 +195,9 @@ describe("secrets model-visibility conformance", () => {
       );
       const row = { ...scope, ...destination, ...encrypted };
       const prisma = {
-        botSecret: {
+        // The row sits in the Space's own vault, so the lookup matches its spaceId.
+        spaceSettingOverride: { findUnique: vi.fn(async () => ({ setting: "credentials" })) },
+        vaultCredential: {
           findFirst: vi.fn(async ({ where }) =>
             Object.entries(where).every(([key, value]) => row[key as keyof typeof row] === value)
               ? row

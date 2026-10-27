@@ -34,7 +34,14 @@ import {
   TicketSchema,
   UpdateTicketInput,
 } from "./board.js";
-import { BotSecretMetadata, BotSecretPutInput, StoredBotSecretName } from "./bot-secrets.js";
+import {
+  BotSecretMetadata,
+  BotSecretPutInput,
+  StoredBotSecretName,
+  VaultPutInput,
+  VaultRevealed,
+  VaultRevealInput,
+} from "./bot-secrets.js";
 import {
   ActionApprovalRuleSchema,
   ActionAutoReviewSettingsSchema,
@@ -94,6 +101,7 @@ import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
   REPLY_QUOTE_MAX_LENGTH,
   ReorderBotsInput,
+  ROUTINE_MENTION_BATCH_MAX,
   RoutineSchema,
   ScratchpadItemSchema,
   ScratchpadItemStatusSchema,
@@ -133,7 +141,12 @@ import { ModelHeadersSchema } from "./model-headers.js";
 import { ModelRoleSchema, ModelRoleUpdateSchema, ModelRoleViewSchema } from "./model-roles.js";
 import { MessageReactionSchema } from "./reactions.js";
 import { RoutineWatchSchema } from "./routine-watch.js";
-import { RoutineHistorySchema, RoutineRunCursorSchema, RunsListOutputSchema } from "./runs.js";
+import {
+  ROUTINE_HISTORY_PAGE_SIZE,
+  RoutineHistorySchema,
+  RoutineRunCursorSchema,
+  RunsListOutputSchema,
+} from "./runs.js";
 import { SearchQueryOutputSchema } from "./search.js";
 import { SecurityEventListInputSchema, SecurityEventSchema } from "./security-events.js";
 import { SettingsScopeSchema, SpaceSettingSchema, settingsScopeInput } from "./settings-scope.js";
@@ -661,9 +674,18 @@ export const appContract = {
     disconnectProvider: oc.output(z.object({ ok: z.literal(true) })),
   },
   routines: {
+    listForMentions: oc
+      .input(z.object({ botIds: z.array(Id).min(1).max(ROUTINE_MENTION_BATCH_MAX) }))
+      .output(z.array(z.object({ botId: Id, routines: z.array(RoutineSchema) }))),
     list: oc.input(botId).output(z.array(RoutineSchema)),
     history: oc
-      .input(z.object({ routineId: Id, before: RoutineRunCursorSchema.optional() }))
+      .input(
+        z.object({
+          routineId: Id,
+          before: RoutineRunCursorSchema.optional(),
+          limit: z.number().int().min(1).max(ROUTINE_HISTORY_PAGE_SIZE).optional(),
+        }),
+      )
       .output(RoutineHistorySchema),
     create: oc.input(CreateRoutineInput).output(RoutineSchema),
     update: oc
@@ -1177,6 +1199,16 @@ export const appContract = {
     put: oc.input(AgentSecretInputSchema).output(AgentSecretSchema),
     remove: oc.input(z.object({ id: Id })).output(z.object({ ok: z.literal(true) })),
   },
+  vault: {
+    list: oc.input(settingsScopeInput.optional()).output(z.array(BotSecretMetadata)),
+    put: oc.input(VaultPutInput).output(BotSecretMetadata),
+    /** Needs a recent identity confirmation on this session (IDENTITY_CONFIRMATION_REQUIRED). */
+    reveal: oc.input(VaultRevealInput).output(VaultRevealed),
+    remove: oc
+      .input(settingsScopeInput.extend({ name: StoredBotSecretName }))
+      .output(z.object({ ok: z.literal(true) })),
+  },
+  /** The vault this Space uses, for apps that predate it. The bot only checks access. */
   botSecrets: {
     list: oc.input(z.object({ botId: Id })).output(z.array(BotSecretMetadata)),
     put: oc.input(BotSecretPutInput).output(BotSecretMetadata),

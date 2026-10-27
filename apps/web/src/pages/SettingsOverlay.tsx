@@ -9,6 +9,7 @@ import {
   Cpu,
   CreditCard,
   Gauge,
+  KeyRound,
   MessageCircle,
   Monitor,
   Settings,
@@ -21,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApprovalRulesSettings } from "../components/ApprovalRulesSettings";
 import { computersAreUnavailable } from "../components/ComputersUnavailableHint";
 import { SETTINGS_CONTENT_WIDTH, SettingsGroup, SettingsRow } from "../components/SettingsRows";
+import { VaultSettings } from "../components/VaultSettings";
 import { desktopBridge } from "../lib/desktop";
 import { SpaceRpcProvider } from "../lib/space-rpc";
 import {
@@ -146,6 +148,7 @@ export function SettingsOverlay({
     { id: "models", label: t`Models`, icon: Cpu },
     { id: "voice", label: t`Voice`, icon: Volume2 },
     { id: "confirmations", label: t`Approvals`, icon: ShieldCheck },
+    { id: "vault", label: t`Vault`, icon: KeyRound },
     ...(messagingEnabled
       ? [{ id: "messaging" as const, label: t`Messaging`, icon: MessageCircle }]
       : []),
@@ -393,6 +396,7 @@ export function SettingsOverlay({
                     />
                   ) : null}
                   {section === "confirmations" ? <ApprovalRulesSettings scope="account" /> : null}
+                  {section === "vault" ? <VaultSettings scope="account" /> : null}
                   {section === "messaging" && messagingEnabled ? <MessagingSettingsPanel /> : null}
                   {section === "usage" ? (
                     <UsageSettingsPanel usage={usage} panelRef={usageRef} />

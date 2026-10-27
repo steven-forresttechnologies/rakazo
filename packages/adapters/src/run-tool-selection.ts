@@ -71,6 +71,8 @@ export function selectBuiltinToolsForRun(options: {
   fleetManagement?: boolean;
   /** A follow-up run whose source message the user wrote. */
   followUpFromUser?: boolean;
+  /** The person who started this run has their desktop connected (see userComputerOwner). */
+  userComputer?: boolean;
 }) {
   const disabled = disabledBuiltinToolSet(options.disabledBuiltinTools);
   const fleetToolsAllowed = isOwnerStartedRun(options.trigger, Boolean(options.followUpFromUser));
@@ -110,6 +112,7 @@ export function selectBuiltinToolsForRun(options: {
           "generate_video",
         ].includes(tool.name)) &&
       (options.voiceCall || tool.name !== "end_call") &&
+      (options.userComputer || tool.name !== "user_computer_shell") &&
       // Already on a call, or reached through a messaging channel that cannot ring.
       ((options.phoneCallsEnabled &&
         !options.groupId &&

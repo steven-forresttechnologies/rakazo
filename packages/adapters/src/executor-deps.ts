@@ -22,6 +22,7 @@ import type { MemoryProviderResolver } from "./memory-provider-factory.js";
 import type { CodexLiveCatalog } from "./pi-codex-catalog.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import type { TicketChangeNotifier } from "./ticket-changes.js";
+import type { UserDeviceGateway } from "./user-device-protocol.js";
 
 export interface ExecutorDeps {
   maxUploadSizeBytes?: number;
@@ -76,6 +77,8 @@ export interface ExecutorDeps {
    * can still run for the OAuth account whose backend lists it.
    */
   codexCatalog?: CodexLiveCatalog;
+  /** The run starter's connected desktop; absent never offers user_computer_shell. */
+  userDevices?: UserDeviceGateway;
   /** Aborted when createApp stop() begins so in-flight continueRun boot waits exit promptly. */
   shutdownSignal?: AbortSignal;
 }

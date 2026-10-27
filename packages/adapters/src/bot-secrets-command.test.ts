@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { BotSecretDestination } from "@rakazo/contracts";
 import { redactSecrets } from "@rakazo/core";
-import type { PrismaClient } from "@rakazo/db";
 import { describe, expect, it, vi } from "vitest";
 import { redactAgentCommandResult } from "./agent-environment.js";
 import {
@@ -16,72 +15,11 @@ import {
   shellCommandEnvironment,
   storeBotSecret,
 } from "./bot-secrets.js";
+import { accountVault, fakeDatabase } from "./bot-secrets.test-support.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { EncryptedSecretStore } from "./secrets.js";
 
-// No database is available offline, so these run against an in-memory stand-in for the
-// bot_secrets table. Encryption, validation, and redaction are the real implementations.
-type Row = {
-  id: string;
-  userId: string;
-  spaceId: string;
-  botId: string;
-  name: string;
-  origin: string;
-  auth: unknown;
-  ciphertext: string;
-};
-type Where = Record<string, unknown>;
-
-function matches(row: Row, where: Where) {
-  return Object.entries(where).every(([key, value]) => {
-    const field = row[key as keyof Row];
-    if (value && typeof value === "object" && "not" in value) return field !== value.not;
-    return field === value;
-  });
-}
-
-function fakeDatabase() {
-  let rows: Row[] = [];
-  const botSecret = {
-    findFirst: vi.fn(
-      async ({ where }: { where: Where }) => rows.find((r) => matches(r, where)) ?? null,
-    ),
-    findMany: vi.fn(async ({ where, take }: { where: Where; take?: number }) =>
-      rows
-        .filter((row) => matches(row, where))
-        .sort((left, right) => left.name.localeCompare(right.name))
-        .slice(0, take ?? rows.length),
-    ),
-    count: vi.fn(
-      async ({ where }: { where: Where }) => rows.filter((r) => matches(r, where)).length,
-    ),
-    create: vi.fn(async ({ data }: { data: Row }) => {
-      rows.push({ ...data });
-    }),
-    update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<Row> }) => {
-      Object.assign(rows.find((row) => row.id === where.id)!, data);
-    }),
-    deleteMany: vi.fn(async ({ where }: { where: Where }) => {
-      const before = rows.length;
-      rows = rows.filter((row) => !matches(row, where));
-      return { count: before - rows.length };
-    }),
-  };
-  const client: Record<string, unknown> = {
-    botSecret,
-    secret: { count: vi.fn(async () => 0) },
-    integrationProviderConfig: { count: vi.fn(async () => 0) },
-    $queryRaw: vi.fn(async () => []),
-  };
-  client.$transaction = async (fn: (tx: unknown) => Promise<unknown>) => fn(client);
-  return {
-    rows: () => rows,
-    prisma: client as unknown as PrismaClient,
-  };
-}
-
-const scope = { userId: "user-1", spaceId: "space-1", botId: "bot-1" };
+const scope = { userId: "user-1", spaceId: "space-1" };
 const secretStore = new EncryptedSecretStore("test-only-encryption-key");
 const command = { type: "command" } as const;
 
@@ -237,20 +175,20 @@ describe("list_secrets", () => {
   it("reports an invalid stored command name separately from a reserved one", async () => {
     const db = fakeDatabase();
     const longName = "a".repeat(65);
-    await db.prisma.botSecret.create({
+    await db.prisma.vaultCredential.create({
       data: {
         id: "long-name",
-        ...scope,
+        ...accountVault,
         name: longName,
         origin: "",
         auth: command,
         ciphertext: "unused",
       },
     });
-    await db.prisma.botSecret.create({
+    await db.prisma.vaultCredential.create({
       data: {
         id: "reserved-path",
-        ...scope,
+        ...accountVault,
         name: "path",
         origin: "",
         auth: command,
@@ -319,12 +257,10 @@ describe("shell command environment", () => {
     const db = fakeDatabase();
     await save(db, "good-token", "fake-good-token");
     const bad = "pre\uD800post";
-    await db.prisma.botSecret.create({
+    await db.prisma.vaultCredential.create({
       data: {
         id: "stored-bad",
-        userId: scope.userId,
-        spaceId: scope.spaceId,
-        botId: scope.botId,
+        ...accountVault,
         name: "bad-token",
         origin: "",
         auth: command,
@@ -482,14 +418,48 @@ describe("shell command environment", () => {
     expect((await runCommand()).env).toEqual({});
   });
 
-  it("exports only this bot's command variables", async () => {
+  it("exports every command variable when a merged vault holds more than 100", async () => {
+    const db = fakeDatabase();
+    const value = await secretStore.put(
+      "fake-merged-value",
+      { ...scope, operationId: "test", traceId: "test", signal: new AbortController().signal },
+      { recordId: "merged" },
+    );
+    // Two bots' credentials merged into one vault can exceed the limit on new writes.
+    for (let index = 0; index < 120; index += 1) {
+      await db.prisma.vaultCredential.create({
+        data: {
+          id: "merged",
+          ...accountVault,
+          name: `tool-${index}`,
+          origin: "",
+          auth: command,
+          ciphertext: value.ciphertext,
+        },
+      });
+    }
+    const environment = await loadBotCommandEnvironment(db.prisma, secretStore, scope);
+    expect(Object.keys(environment)).toHaveLength(120);
+    expect(environment.TOOL_119).toBe("fake-merged-value");
+  });
+
+  it("exports the command variables of the vault this Space uses", async () => {
     const db = fakeDatabase();
     await save(db, "cli-token", "fake-cli-token-1");
     await save(db, "api", "fake-bearer-1", {
       origin: "https://api.example.test",
       auth: { type: "bearer" },
     });
-    await save(db, "other-bot-token", "fake-other-1", {}, { ...scope, botId: "bot-2" });
+    const otherSpace = { ...scope, spaceId: "space-2" };
+    // The account vault reaches every Space that has no vault of its own.
+    expect(await loadBotCommandEnvironment(db.prisma, secretStore, otherSpace)).toEqual({
+      CLI_TOKEN: "fake-cli-token-1",
+    });
+    db.useOwnVault("space-2");
+    await save(db, "private-token", "fake-private-1", {}, otherSpace);
+    expect(await loadBotCommandEnvironment(db.prisma, secretStore, otherSpace)).toEqual({
+      PRIVATE_TOKEN: "fake-private-1",
+    });
     expect(await loadBotCommandEnvironment(db.prisma, secretStore, scope)).toEqual({
       CLI_TOKEN: "fake-cli-token-1",
     });

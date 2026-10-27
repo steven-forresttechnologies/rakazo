@@ -45,6 +45,16 @@ export const AUDITED_PROCEDURES: Record<string, AuditedProcedure> = {
     kind: "bot_secret",
     fields: ["botId", "name"],
   },
+  "vault.put": {
+    type: "credential.changed",
+    kind: "vault_credential",
+    fields: ["scope", "destination.name"],
+  },
+  "vault.remove": {
+    type: "credential.deleted",
+    kind: "vault_credential",
+    fields: ["scope", "name"],
+  },
   "bots.rotateWebhookSecret": { type: "credential.changed", kind: "webhook", fields: ["botId"] },
   "voice.connect": { type: "credential.created", kind: "voice", fields: ["provider"] },
   "voice.disconnect": { type: "credential.deleted", kind: "voice", fields: ["provider"] },

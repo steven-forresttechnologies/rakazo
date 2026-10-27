@@ -155,6 +155,8 @@ import {
   selectBuiltinToolsForRun,
 } from "./run-tool-selection.js";
 import { applyTool } from "./run-tools.js";
+import type { UserComputerState } from "./run-tools-user-computer.js";
+import { USER_COMPUTER_SHELL_TOOL, userComputerOwner } from "./run-tools-user-computer.js";
 import { createRunTrustLoaders } from "./run-trust.js";
 import { completeRun, consumeRunEvents, failRun } from "./run-turn.js";
 import {
@@ -933,6 +935,25 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const pageBrowserAllowed =
           graphical && browser.describe().capabilities.page && !heldForTakeover;
         const disabledBuiltinTools = disabledBuiltinToolSet(bot.disabledBuiltinTools);
+        const userComputerOwnerId = userComputerOwner({
+          trigger: run.trigger,
+          sourceRole: sourceMessage?.role,
+          messagingChannelRun,
+          runUserId: run.userId,
+          botUserId: bot.userId,
+        });
+        let userComputer: UserComputerState;
+        if (
+          userComputerOwnerId &&
+          deps.userDevices &&
+          !disabledBuiltinTools.has(USER_COMPUTER_SHELL_TOOL)
+        ) {
+          if (await deps.userDevices.connected(userComputerOwnerId).catch(() => null))
+            userComputer = "connected";
+          // A chat that used the computer earlier may continue from another device after it closed.
+          else if (await deps.userDevices.hasDevice(userComputerOwnerId).catch(() => false))
+            userComputer = "offline";
+        }
         const builtins = [
           ...selectBuiltinToolsForRun({
             ticketBoardEnabled: deps.ticketBoardEnabled,
@@ -952,6 +973,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             disabledBuiltinTools: bot.disabledBuiltinTools,
             fleetManagement: bot.fleetManagement,
             followUpFromUser: sourceMessage?.role === "user",
+            userComputer: userComputer === "connected",
           }),
           // Cross-owner agent connections only exist for chat-linked bots.
           ...(hasMessagingIdentity &&
@@ -1107,6 +1129,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             callEndRun,
             callClientNonce: callClientNonceForRun,
             peerMessage,
+            userComputerOwner: userComputerOwnerId,
           },
           computer: {
             stored: storedComputer,
@@ -1392,6 +1415,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 replyGuidance: runReplyGuidance(run.trigger),
                 disabledBuiltinTools,
                 offeredFleetTools: offeredFleetTools(builtins),
+                userComputer,
               })
                 .filter((instruction): instruction is string => Boolean(instruction))
                 .join("\n\n"),

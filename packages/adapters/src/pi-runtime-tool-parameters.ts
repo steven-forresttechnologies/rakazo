@@ -78,7 +78,7 @@ function builtinParameters(tool: ConnectorTool) {
   if (tool.name === "remember") {
     return Type.Object({ content: Type.String(), path: Type.String() });
   }
-  if (tool.name === "shell") {
+  if (tool.name === "shell" || tool.name === "user_computer_shell") {
     return Type.Object({
       command: Type.String(),
       cwd: Type.Optional(Type.String()),

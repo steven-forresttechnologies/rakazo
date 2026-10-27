@@ -1,5 +1,5 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { BotSecretMetadata } from "@rakazo/contracts";
+import type { BotSecretMetadata, SettingsScope } from "@rakazo/contracts";
 import {
   BotSecretName,
   commandVariableName,
@@ -11,11 +11,11 @@ import { Button, Input, NativeSelect, NativeSelectOption } from "@rakazo/ui-web"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@rakazo/ui-web/components/ui/tooltip";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, RotateCcw, X } from "lucide-react";
-import { useId, useState } from "react";
-import { InfoTooltip } from "../../components/InfoTooltip";
-import { useSpaceQueries } from "../../lib/query";
-import { useSpaceRpc } from "../../lib/space-rpc";
-import { errorText } from "../../lib/user-error";
+import { useEffect, useId, useState } from "react";
+import { useSpaceQueries } from "../lib/query";
+import { useSpaceRpc } from "../lib/space-rpc";
+import { errorText } from "../lib/user-error";
+import { InfoTooltip } from "./InfoTooltip";
 
 type ReadableCredentialAuth = NonNullable<BotSecretMetadata["auth"]>;
 type CredentialAuthType = ReadableCredentialAuth["type"];
@@ -32,13 +32,20 @@ function credentialDestination(name: string, origin: string, auth: ReadableCrede
   return auth.type === "command" ? { name, auth } : { name, origin, auth };
 }
 
-export function BotCredentialsSection({ botId }: { botId: string }) {
+/** The credentials in the account's vault, or in the bound Space's own once it customizes them. */
+export function VaultSettings({
+  scope,
+  onBusyChange,
+}: {
+  scope: SettingsScope;
+  onBusyChange?: (busy: boolean) => void;
+}) {
   const { t } = useLingui();
   const ids = useId();
   const rpc = useSpaceRpc();
   const queries = useSpaceQueries();
   const queryClient = useQueryClient();
-  const list = queries.botSecrets.list.queryOptions({ input: { botId } });
+  const list = queries.vault.list.queryOptions({ input: { scope } });
   const listQuery = useQuery({ ...list, refetchOnMount: "always" });
   const secrets = listQuery.data;
   const loadFailed = listQuery.isError;
@@ -55,6 +62,11 @@ export function BotCredentialsSection({ botId }: { botId: string }) {
   // Protected fields: held only in component state and cleared on every submit or cancel.
   const [loginUsername, setLoginUsername] = useState("");
   const [value, setValue] = useState("");
+
+  useEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
+  useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
 
   async function refresh() {
     try {
@@ -110,7 +122,7 @@ export function BotCredentialsSection({ botId }: { botId: string }) {
     }
     setBusy(true);
     try {
-      await rpc.botSecrets.put({ botId, destination, value: plaintext });
+      await rpc.vault.put({ scope, destination, value: plaintext });
       if (!(await refresh())) {
         setError(t`Could not load credentials.`);
         return false;
@@ -147,7 +159,7 @@ export function BotCredentialsSection({ botId }: { botId: string }) {
     setError(null);
     setBusy(true);
     try {
-      await rpc.botSecrets.remove({ botId, name: secretName });
+      await rpc.vault.remove({ scope, name: secretName });
       setConfirmingRemove(null);
       if (!(await refresh())) {
         await writeSaved(queryClient, list.queryKey, (prev = []) =>
@@ -216,37 +228,9 @@ export function BotCredentialsSection({ botId }: { botId: string }) {
     valueReady(authType);
 
   return (
-    <section data-testid="bot-credentials">
-      <div className="mb-2 flex items-center justify-between pe-1">
-        <h3 className="text-xs font-medium text-muted-foreground">
-          <Trans>Credentials</Trans>
-        </h3>
-        <Tooltip>
-          <TooltipTrigger
-            render={<Button variant="ghost" size="icon-xs" />}
-            type="button"
-            aria-label={t`Add credential`}
-            data-testid="credential-add"
-            disabled={busy || adding}
-            onClick={() => {
-              clearProtectedFields();
-              setReplacing(null);
-              setConfirmingRemove(null);
-              setAdding(true);
-            }}
-          >
-            <Plus className="size-4 text-muted-foreground" />
-          </TooltipTrigger>
-          <TooltipContent>
-            <Trans>Add credential</Trans>
-          </TooltipContent>
-        </Tooltip>
-      </div>
+    <section data-testid="vault" className="space-y-3">
       {loadFailed || secrets?.length || error || adding ? (
-        <div
-          data-testid="bot-credentials-card"
-          className="rounded-xl bg-muted/50 p-4 [&>:first-child]:mt-0"
-        >
+        <div data-testid="vault-card" className="rounded-xl bg-muted/50 p-4 [&>:first-child]:mt-0">
           {loadFailed ? (
             <p className="mt-3 text-[13px] text-destructive">
               <Trans>Could not load credentials.</Trans>
@@ -264,11 +248,12 @@ export function BotCredentialsSection({ botId }: { botId: string }) {
                     ? secret.auth
                     : null;
                 return (
-                  <li key={secret.name} data-testid="bot-credential-row">
+                  <li key={secret.name} data-testid="vault-credential-row">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 truncate text-[13.5px] font-medium text-foreground">
                         {secret.name}
                       </div>
+                      {/* Per-row actions; each one closes the others' open forms. */}
                       {replacing !== secret.name && confirmingRemove !== secret.name ? (
                         <div className="-mt-0.5 flex shrink-0 gap-1">
                           {readableAuth !== null ? (
@@ -374,9 +359,7 @@ export function BotCredentialsSection({ botId }: { botId: string }) {
                     ) : confirmingRemove === secret.name ? (
                       <div className="mt-2">
                         <p className="text-[13px] text-foreground">
-                          <Trans>
-                            Remove {secretName}? This bot will no longer be able to use it.
-                          </Trans>
+                          <Trans>Remove {secretName}? Bots will no longer be able to use it.</Trans>
                         </p>
                         <div className="mt-2 flex gap-2">
                           <Button
@@ -455,7 +438,7 @@ export function BotCredentialsSection({ botId }: { botId: string }) {
                     data-testid="credential-command-variable"
                     className="mt-1 block text-[12px] text-muted-foreground"
                   >
-                    {t`Available to this bot's shell commands as ${commandVariable}`}
+                    {t`Available to shell commands as ${commandVariable}`}
                   </span>
                 ) : null}
               </div>
@@ -545,6 +528,24 @@ export function BotCredentialsSection({ botId }: { botId: string }) {
           ) : null}
         </div>
       ) : null}
+      {adding ? null : (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          data-testid="credential-add"
+          disabled={busy}
+          onClick={() => {
+            clearProtectedFields();
+            setReplacing(null);
+            setConfirmingRemove(null);
+            setAdding(true);
+          }}
+        >
+          <Plus />
+          <Trans>Add credential</Trans>
+        </Button>
+      )}
     </section>
   );
 }

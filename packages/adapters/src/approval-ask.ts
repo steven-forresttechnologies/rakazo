@@ -101,6 +101,24 @@ export function buildApprovalAskBlock(
       ],
     };
   }
+  if (toolName === "user_computer_shell") {
+    const cwd = typeof args.cwd === "string" && args.cwd.trim() ? `cd ${args.cwd.trim()}\n` : "";
+    return {
+      kind: "ask",
+      approvalEffectId: effectId,
+      text: "Run on your computer?",
+      detail: truncate(
+        redactSecrets(`${cwd}${String(args.command ?? "")}`, secrets),
+        MAX_APPROVAL_DETAIL_LENGTH,
+      ),
+      detailFormat: "code",
+      status: "pending",
+      actions: [
+        { id: "allow", label: "Allow for this chat" },
+        { id: "deny", label: "Deny" },
+      ],
+    };
+  }
   const fetchSite = webFetchSite(toolName, args);
   const summary = describeApprovalAction(toolName, args);
   const detail = formatApprovalDetail(toolName, args, options?.reviewReason);

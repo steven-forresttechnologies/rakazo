@@ -11,6 +11,7 @@ loadRootEnv();
 import {
   ChatSdkMessagingSurface,
   CodexCatalogCache,
+  contentKeyProviderFromEnv,
   createAgentHomeStore,
   createArtifactStore,
   createBackgroundJobHandlers,
@@ -62,6 +63,8 @@ import {
   SpaceMemoryProviderResolver,
   sandboxProviderOptionsFromEnv,
   shutdownPiTelemetry,
+  UserDevices,
+  userDeviceForwardSecret,
   withRunWorker,
   withSecretPersistence,
 } from "@rakazo/adapters";
@@ -101,6 +104,7 @@ async function main() {
   const created = createDb(databaseUrl, {
     poolMax,
     applicationName: "rakazo-worker",
+    keyProvider: contentKeyProviderFromEnv(),
   });
   const { pool } = created;
   let { prisma } = created;
@@ -282,6 +286,14 @@ async function main() {
     messaging: messaging ? createMessagingContextLoader(prisma) : undefined,
     web: createWebProvider(),
     cloudAgent,
+    // Device sockets live in an API process; the worker forwards to whichever one holds it.
+    userDevices:
+      process.env.USER_DEVICES_ENABLED === "false"
+        ? undefined
+        : new UserDevices({
+            prisma,
+            forwardSecret: userDeviceForwardSecret(resolveEncryptionKey(process.env)),
+          }),
   });
 
   const jobHost: JobWorkerHost =
