@@ -39,7 +39,7 @@ import {
 } from "@rakazo/db";
 import { enrichLogContext, getLogger } from "@rakazo/logging";
 import { sanitizedError } from "@rakazo/logging/monitoring";
-import { decryptAgentEnvironment, formatAgentEnvironmentInstruction } from "./agent-environment.js";
+import { formatAgentEnvironmentInstruction } from "./agent-environment.js";
 import { createApprovedEffectReplayQueue } from "./approval-effect.js";
 import { PARTIAL_REPLY_NOTE } from "./automated-messages.js";
 import { loadBotMessageContext } from "./bot-messages.js";
@@ -99,7 +99,9 @@ import {
   runModelChoice,
 } from "./model-selection.js";
 import { modelAcceptsImageInput } from "./model-vision.js";
+import { paymentWalletConnected } from "./payment-wallets.js";
 import { isRetiredModelCredentialError } from "./pi-oauth.js";
+import { loadPurchaseRedactions } from "./purchase-service.js";
 import { loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
 import { backOffRoutineAfterAccountError } from "./routine-backoff.js";
 import { lateRoutineRunInstruction } from "./routine-lateness.js";
@@ -130,6 +132,7 @@ import {
   RUN_SETUP_FAILURE_LIMIT,
   renewRunLease,
   requeueComputerRun,
+  requeueRunAfterShutdown,
   setupFailureStreak,
   writeComputerRunRequeue,
 } from "./run-lifecycle.js";
@@ -205,6 +208,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
     retryRoutineRun: retryRoutineRun.bind(undefined, deps),
 
     async continueRun(runId: string, workerId: string, onRunStarted?: () => void) {
+      // A stopping process must not claim work it cannot finish. The row stays
+      // queued or expired for a worker that is still running.
+      if (deps.shutdownSignal?.aborted) return;
       const run = await deps.prisma.run.findUnique({ where: { id: runId } });
       if (!run) return;
       // Logs and security events raised by this run's tools name its account and space.
@@ -411,9 +417,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           configuredMemory,
           savedSkills,
           agentSkills,
-          agentSecretRows,
           initialBotCommandEnvironment,
           savedLoginPasswordRedactions,
+          purchaseRedactions,
         ] = await Promise.all([
           deps.prisma.bot.findUniqueOrThrow({
             where: { id: run.botId },
@@ -448,15 +454,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
             spaceId: run.spaceId,
             userId: run.userId,
           }),
-          deps.prisma.agentSecret.findMany({
-            where: { spaceId: run.spaceId },
-            select: {
-              name: true,
-              secret: { select: { id: true, ciphertext: true } },
-            },
-          }),
           loadBotCommandEnvironment(deps.prisma, deps.secretStore, run),
           loadLoginPasswordRedactions(deps.prisma, deps.secretStore, run),
+          deps.paymentWallet ? loadPurchaseRedactions(deps, run) : [],
         ]);
         const historySearchBeforeSeq =
           contextStrategy !== "current" && run.sourceMessageId
@@ -469,17 +469,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
               )?.seq ??
               thread.nextMessageSeq)
             : thread.nextMessageSeq;
-        const agentEnvironment = await decryptAgentEnvironment(agentSecretRows, deps.secretStore);
-        runSecrets.push(...Object.values(agentEnvironment));
         // Encoded forms too: read_file redacts with these values before any shell command runs.
         runSecrets.push(...commandCredentialRedactions(initialBotCommandEnvironment));
         // A login filled in an earlier run may still be on its page, and anything this run reads
         // or is given may contain it, so every run hides its saved passwords before the model runs.
-        runSecrets.push(...savedLoginPasswordRedactions);
-        const agentEnvironmentInstruction = formatAgentEnvironmentInstruction({
-          ...agentEnvironment,
-          ...initialBotCommandEnvironment,
-        });
+        runSecrets.push(...savedLoginPasswordRedactions, ...purchaseRedactions);
+        const agentEnvironmentInstruction = formatAgentEnvironmentInstruction(
+          initialBotCommandEnvironment,
+        );
         // modelPinned distinguishes the captured choice from an attempt's recorded model.
         const modelChoice = runModelChoice(run, bot);
         const hasModelOverride = Boolean(modelChoice.modelProvider && modelChoice.modelId);
@@ -880,9 +877,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
           .join("\n\n");
         const graphical =
           computerKind !== "desktop" && deps.sandbox.describe().capabilities.graphical;
-        // Gate on the model this run will actually call — the pair written to the run row
-        // above. Deriving it a second time here dropped the deployment fallback, so a
-        // vision-capable default was gated as "scripted" and lost its screenshot tools.
+        // Gate on the pair written to the run row above; re-deriving it would drop the
+        // deployment fallback and gate a vision-capable default as text-only.
         const modelSeesImages = modelAcceptsImageInput(
           runModelProvider,
           runModelId,
@@ -897,6 +893,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
           : undefined;
         const hasMessagingIdentity = deps.messaging
           ? await deps.messaging.hasIdentity(bot.id)
+          : false;
+        const paymentWallet = deps.paymentWallet;
+        const paymentWalletEnabled = paymentWallet
+          ? await paymentWalletConnected(
+              { prisma: deps.prisma, secretStore: deps.secretStore, paymentWallet },
+              run.userId,
+            )
           : false;
         const messagingContext = hasMessagingIdentity
           ? [messagingDmSurfaceNote(), messagingChannelRun ? messagingChannelPrivacyBlock() : null]
@@ -968,6 +971,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             mediaImagesEnabled: Boolean(deps.artifacts && mediaGeneration?.capabilities.images),
             mediaVideoEnabled: Boolean(deps.artifacts && mediaGeneration?.capabilities.video),
             cloudAgentEnabled: cloudAgentsEnabled(cloudAgent, run.spaceId),
+            paymentWalletEnabled,
             messagingChannelRun,
             voiceCall,
             disabledBuiltinTools: bot.disabledBuiltinTools,
@@ -1119,7 +1123,6 @@ export function createRunExecutor(deps: ExecutorDeps) {
           abortController: runAbortController,
           fleetRun,
           secrets: runSecrets,
-          agentEnvironment,
           source: {
             ownerStartedRun,
             messagingChannelRun,
@@ -1290,7 +1293,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   id: { not: bot.id },
                   thread: { isNot: null },
                 },
-                select: { id: true, name: true, title: true, description: true },
+                select: { id: true, name: true, description: true },
                 orderBy: { createdAt: "asc" },
                 take: BOT_DIRECTORY_LIMIT,
               }),
@@ -1364,6 +1367,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
         );
         // Provider kind and model id only: custom endpoints are identified by kind, never host.
         const activeModel = { "model.provider": runModelProvider, "model.id": runModelId };
+        // Shutdown must not finalize the attempt. The finally block queues the run
+        // when this worker still owns it.
+        const interruptedByShutdown = async () => {
+          if (!deps.shutdownSignal?.aborted) return false;
+          if (!ctx.state.terminalCheckpointComplete) {
+            await ctx.computer.checkpoint.flush().catch(() => undefined);
+          }
+          return true;
+        };
 
         try {
           if (checkpointLoadError) throw checkpointLoadError;
@@ -1563,14 +1575,19 @@ export function createRunExecutor(deps: ExecutorDeps) {
             context,
           );
           if (await consumeRunEvents(ctx, runtimeEvents)) return;
+          if (await interruptedByShutdown()) return;
           await completeRun(ctx);
         } catch (caughtError) {
+          if (await interruptedByShutdown()) return;
           await failRun(ctx, caughtError, {
             ownCredential: resolved.ownCredential,
             active: activeModel,
           });
         }
       } catch (setupError) {
+        // An abort while stopping is not a setup failure, and must not spend the
+        // retry budget that eventually fails the run.
+        if (deps.shutdownSignal?.aborted) return;
         const computerBusy = setupError instanceof ComputerBusyError;
         const retryForever = computerBusy || isTooManyDatabaseConnections(setupError);
         const setupMessage = redactSecrets(userRunError(setupError), runSecrets);
@@ -1644,6 +1661,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
               .catch(() => undefined);
           }
           await releaseComputerExecutionLease(deps.prisma, computerLease).catch(() => undefined);
+        }
+        if (deps.shutdownSignal?.aborted) {
+          // A renewal still in flight must not treat this release as a lost lease.
+          lease.completed = true;
+          await requeueRunAfterShutdown(deps, runId, workerId, fence).catch((error) =>
+            getLogger().error("shutdown run requeue", error),
+          );
         }
         await deps.prisma.attempt
           .updateMany({

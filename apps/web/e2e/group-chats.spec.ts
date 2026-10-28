@@ -146,7 +146,7 @@ test("create group from + and see two bots in one transcript", async ({ page }, 
   await expect(
     page.getByTestId("mention-chip").filter({ hasText: "Research Writer" }),
   ).toBeVisible();
-  await composer.fill("turn the sources into a draft. @Res");
+  await composer.pressSequentially("turn the sources into a draft. @Res");
   await page.getByRole("option", { name: "@Researcher", exact: true }).click();
   await expect(page.getByTestId("mention-chip").filter({ hasText: "Researcher" })).toBeVisible();
   await composer.fill(`${await composer.inputValue()}gather sources.`);
@@ -178,7 +178,7 @@ test("create group from + and see two bots in one transcript", async ({ page }, 
   await expect(
     page.getByTestId("mention-chip").filter({ hasText: "Research Writer" }),
   ).toBeVisible();
-  await composer.fill("ask me which city to use");
+  await composer.pressSequentially("ask me which city to use");
   await composer.press("Enter");
   // threads/get can observe waiting_input before the shell realtime feed paints the ask card.
   await expect
@@ -260,7 +260,6 @@ test("create group from + and see two bots in one transcript", async ({ page }, 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("button", { name: "Open navigation" })).toBeVisible();
   await expect(page.getByTestId("app-rail")).toHaveCount(0);
-  // Chat fills the phone width.
   const transcriptBox = await transcript.boundingBox();
   expect(transcriptBox?.x).toBeLessThanOrEqual(16);
   expect(transcriptBox?.width).toBeGreaterThan(390 - 24);

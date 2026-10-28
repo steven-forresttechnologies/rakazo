@@ -73,6 +73,7 @@ describePostgres("billing service (PostgreSQL)", () => {
       currentPeriodEndsAt: null,
       cancelAtPeriodEnd: false,
       hasCustomer: false,
+      referral: null,
     });
   });
 

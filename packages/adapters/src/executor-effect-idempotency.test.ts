@@ -203,7 +203,6 @@ function fixture(runId = "run-1") {
       })),
     },
     taughtSkill: { findMany: vi.fn(async () => []) },
-    agentSecret: { findMany: vi.fn(async () => []) },
     vaultCredential: { findMany: vi.fn(async () => []) },
     agentSkill: { findMany: vi.fn(async () => []) },
     scratchpadItem: {

@@ -35,8 +35,8 @@ export const BotSecretAuth = z.discriminatedUnion("type", [
       .max(200)
       .regex(/^[^:\r\n]+$/),
   }),
-  // A website sign-in. The username and password are both protected; the backend only types
-  // them into pages on the saved origin and never sends them as HTTP credentials.
+  // A website sign-in. Its fields are all protected; the backend only types them into pages on
+  // the saved origin and never sends them as HTTP credentials.
   z.object({ type: z.literal("login") }),
   // A value exported to this bot's shell commands as an environment variable. It has no site.
   z.object({ type: z.literal("command") }),
@@ -220,18 +220,223 @@ export function botSecretDestinationSchema(options?: { allowPrivateHttpOrigin?: 
 export const BotSecretDestination = botSecretDestinationSchema();
 export type BotSecretDestination = z.infer<typeof BotSecretDestination>;
 
-export const LoginSecretValue = z.object({
+export const BOT_SECRET_VALUE_MAX_LENGTH = 16_384;
+
+export const LOGIN_FIELD_LIMIT = 8;
+export const LoginFieldLabel = z.string().trim().min(1).max(64);
+/** What a login asks for when no field labels are given, and what a saved username/password pair reads as. */
+export const DEFAULT_LOGIN_FIELD_LABELS = ["Username", "Password"] as const;
+
+/**
+ * One value of a website login. A hidden value is typed only into a password field; a visible
+ * one into any text field on the login's site. Only the person chooses which.
+ */
+export const LoginFieldInput = z.object({
+  label: LoginFieldLabel,
+  value: z.string().max(4096),
+  hidden: z.boolean(),
+});
+export type LoginFieldInput = z.infer<typeof LoginFieldInput>;
+export const LoginField = LoginFieldInput.transform((field) =>
+  field.hidden ? field : { ...field, value: field.value.trim() },
+).refine((field) => field.value.length > 0, "Enter a value");
+export type LoginField = z.infer<typeof LoginField>;
+
+export function sameLoginFieldLabel(left: string, right: string): boolean {
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
+}
+
+function uniqueLabels(labels: readonly string[]): boolean {
+  return new Set(labels.map((label) => label.trim().toLowerCase())).size === labels.length;
+}
+
+export const LoginFieldLabels = z
+  .array(LoginFieldLabel)
+  .min(1)
+  .max(LOGIN_FIELD_LIMIT)
+  .refine(uniqueLabels, "Give each field a different label");
+
+export const LoginSecretValue = z
+  .object({ fields: z.array(LoginField).min(1).max(LOGIN_FIELD_LIMIT) })
+  .refine(
+    (login) => uniqueLabels(login.fields.map((field) => field.label)),
+    "Give each field a different label",
+  )
+  .refine(
+    (login) => JSON.stringify(login).length <= BOT_SECRET_VALUE_MAX_LENGTH,
+    "This login is too long",
+  );
+export type LoginSecretValue = z.infer<typeof LoginSecretValue>;
+
+// Logins saved before fields existed. Never written again, so a release that predates fields
+// fails to parse a new value instead of misreading it.
+const LegacyLoginSecretValue = z.object({
   username: z.string().min(1).max(512),
   password: z.string().min(1).max(4096),
 });
-export type LoginSecretValue = z.infer<typeof LoginSecretValue>;
 
-export function encodeLoginSecret(value: LoginSecretValue): string {
+export function encodeLoginSecret(value: z.input<typeof LoginSecretValue>): string {
   return JSON.stringify(LoginSecretValue.parse(value));
 }
 
 export function decodeLoginSecret(plaintext: string): LoginSecretValue {
-  return LoginSecretValue.parse(JSON.parse(plaintext));
+  const parsed: unknown = JSON.parse(plaintext);
+  const legacy = LegacyLoginSecretValue.safeParse(parsed);
+  if (!legacy.success) return LoginSecretValue.parse(parsed);
+  const [username, password] = DEFAULT_LOGIN_FIELD_LABELS;
+  return {
+    fields: [
+      { label: username, value: legacy.data.username, hidden: false },
+      { label: password, value: legacy.data.password, hidden: true },
+    ],
+  };
+}
+
+// A field starts visible only when every word of its label is one of these and at least one is
+// an identifier. Any other word, a misspelling or a look-alike letter included, keeps it hidden.
+// English and Hebrew.
+const IDENTIFIER_WORDS = new Set([
+  "id",
+  "user",
+  "username",
+  "login",
+  "email",
+  "mail",
+  "phone",
+  "mobile",
+  "cell",
+  "tel",
+  "telephone",
+  "account",
+  "member",
+  "customer",
+  "זהות",
+  "תז",
+  "טלפון",
+  "נייד",
+  "פלאפון",
+  "סלולרי",
+  "מייל",
+  "אימייל",
+  "דואל",
+  "משתמש",
+  "חשבון",
+  "לקוח",
+  "חבר",
+]);
+const FILLER_WORDS = new Set([
+  "number",
+  "no",
+  "num",
+  "name",
+  "address",
+  "or",
+  "and",
+  "of",
+  "your",
+  "the",
+  "last",
+  "first",
+  "digit",
+  "digits",
+  "national",
+  "tax",
+  "employee",
+  "e",
+  "תעודת",
+  "מספר",
+  "שם",
+  "כתובת",
+  "או",
+  "של",
+  "ו",
+  "אחרונות",
+  "ספרות",
+  "לאומי",
+  "עובד",
+  "מס",
+]);
+
+function labelWords(label: string): string[] {
+  return (
+    label
+      .normalize("NFKC")
+      .normalize("NFD")
+      .replace(/[\p{M}\p{Cf}]/gu, "")
+      .toLowerCase()
+      // Spaces and punctuation separate words; any other symbol or emoji is a word of its own, so a
+      // label with one is not made only of known words.
+      .match(/[\p{L}\p{N}.'"׳״]+|[^\p{L}\p{N}\p{Z}\s\p{P}№]/gu)
+      ?.map((word) => word.replace(/[.'"׳״]/g, ""))
+      .filter(Boolean) ?? []
+  );
+}
+
+function knownWord(word: string, known: ReadonlySet<string>): boolean {
+  // Hebrew attaches "the" to a word: הטלפון.
+  return known.has(word) || (word.startsWith("ה") && known.has(word.slice(1)));
+}
+
+/** Whether a label is made only of identifier and plain filler words, such as "Phone number". */
+export function isIdentifierLabel(label: string): boolean {
+  const words = labelWords(label);
+  return (
+    words.some((word) => knownWord(word, IDENTIFIER_WORDS)) &&
+    words.every(
+      (word) =>
+        /^\p{N}+$/u.test(word) ||
+        knownWord(word, IDENTIFIER_WORDS) ||
+        knownWord(word, FILLER_WORDS),
+    )
+  );
+}
+
+/**
+ * The empty fields a login card starts with. The default Username and Password card starts as
+ * logins always have, Username visible. Fields the bot names start hidden, except those whose
+ * label is made only of identifier words (ID number, phone, email), which a sign-in without a
+ * password field needs typed into a text field. The system decides this from the label alone; the bot
+ * can't preset a field, and the person can switch any of them before saving.
+ */
+export function loginCardFields(requested: readonly string[] | undefined): LoginFieldInput[] {
+  if (!requested) {
+    return DEFAULT_LOGIN_FIELD_LABELS.map((label, index) => ({
+      label,
+      value: "",
+      hidden: index > 0,
+    }));
+  }
+  return requested.map((label) => ({ label, value: "", hidden: !isIdentifierLabel(label) }));
+}
+
+/**
+ * The login a card's answer saves, or undefined unless it answers exactly the requested fields,
+ * in order. An app that predates fields answers a Username and Password card with `username`
+ * and the password as `answer`.
+ */
+export function loginAnswerValue(
+  requested: readonly string[] | undefined,
+  input: { answer: string; username?: string; fields?: readonly LoginFieldInput[] },
+): LoginSecretValue | undefined {
+  const labels = requested ?? DEFAULT_LOGIN_FIELD_LABELS;
+  const [usernameLabel, passwordLabel] = DEFAULT_LOGIN_FIELD_LABELS;
+  const legacy =
+    !input.fields && input.username !== undefined
+      ? [
+          { label: usernameLabel, value: input.username, hidden: false },
+          { label: passwordLabel, value: input.answer, hidden: true },
+        ]
+      : undefined;
+  const fields = input.fields ?? legacy;
+  if (
+    !fields ||
+    (input.fields && (input.answer !== "" || input.username !== undefined)) ||
+    fields.length !== labels.length ||
+    fields.some((field, index) => field.label.trim() !== labels[index])
+  ) {
+    return undefined;
+  }
+  return LoginSecretValue.safeParse({ fields }).data;
 }
 
 export const GENERATED_SECRET_SYMBOLS = "!@#$%^&*-_=+?";
@@ -262,7 +467,7 @@ export const GenerateSecretInput = z
     name: BotSecretName,
     type: z.enum(["login", "command"]),
     origin: z.string().min(1).max(2048).optional(),
-    username: LoginSecretValue.shape.username.optional(),
+    username: LegacyLoginSecretValue.shape.username.optional(),
     // A login's password also saved as the command variable `<name>-password`, for a CLI.
     command: z.boolean().optional(),
     rules: GeneratedSecretRules.optional(),
@@ -312,8 +517,6 @@ export function botSecretSubmissionSchema(options?: { allowPrivateHttpOrigin?: b
 }
 export const BotSecretSubmission = botSecretSubmissionSchema();
 
-export const BOT_SECRET_VALUE_MAX_LENGTH = 16_384;
-
 /**
  * Owner-facing destination input. Structural only: the origin rules depend on the server's
  * private-HTTP opt-in, so the server enforces them when it stores the value.
@@ -348,7 +551,12 @@ export type VaultPutInput = z.infer<typeof VaultPutInput>;
 export const VaultRevealInput = settingsScopeInput.extend({ name: StoredBotSecretName });
 
 /** A saved value shown to its owner after they confirm it's them: a login's fields, or the value. */
-export const VaultRevealed = z.union([LoginSecretValue, z.object({ value: z.string() })]);
+export const VaultRevealed = z.union([
+  z.object({
+    fields: z.array(z.object({ label: z.string(), value: z.string(), hidden: z.boolean() })),
+  }),
+  z.object({ value: z.string() }),
+]);
 export type VaultRevealed = z.infer<typeof VaultRevealed>;
 
 /**

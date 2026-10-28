@@ -12,7 +12,9 @@ import {
   connectorKindFromToolName,
   connectorReadRequiresApproval,
   connectorToolRequiresApproval,
+  decisiveActionApprovalRules,
   displayName,
+  humanizeToolName,
   newSiteOutcome,
   outboundSiteGate,
   planActionGate,
@@ -27,7 +29,7 @@ import { approvalEffectKey, toolEffectIdempotencyKey } from "@rakazo/core/node/a
 import { runSecretKind } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 import type { FleetCardSummary } from "./approval-ask.js";
-import { buildApprovalAskBlock, MAX_FETCH_URL_LENGTH } from "./approval-ask.js";
+import { buildApprovalAskBlock, MAX_FETCH_URL_LENGTH, SITE_SENDING_TOOLS } from "./approval-ask.js";
 import {
   claimApprovedEffect,
   claimIntendedEffect,
@@ -44,6 +46,7 @@ import {
 import { reviewWithBackups } from "./auto-review-backups.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import { findConnectedModelCredential } from "./model-selection.js";
+import { paidRequestEffect } from "./paid-request.js";
 import { autoReviewCheckerProvider } from "./run-auto-review.js";
 import type { RunContext, RunTrust } from "./run-context.js";
 import {
@@ -150,16 +153,18 @@ export async function gateToolCall(
     );
   const connectorProviders = ctx.tools.connectedPlugins.map((plugin) => plugin.provider);
   const connectorKind = connectorKindFromToolName(name, connectorProviders);
-  const fetchUrl = name === "web_fetch" ? normalizedHttpUrl(String(args.url ?? "")) : undefined;
+  // paid_request with only a purchase id sends the request its approval already named.
+  const sendsToSite =
+    SITE_SENDING_TOOLS.has(name) && (name === "web_fetch" || args.url !== undefined);
+  const fetchUrl = sendsToSite ? normalizedHttpUrl(String(args.url ?? "")) : undefined;
   const fetchSite = fetchUrl ? urlSite(fetchUrl) : undefined;
-  if (name === "web_fetch" && !fetchSite)
-    return { result: { error: "url must be an http(s) URL" } };
+  if (sendsToSite && !fetchSite) return { result: { error: "url must be an http(s) URL" } };
   if (fetchUrl && fetchUrl.length > MAX_FETCH_URL_LENGTH)
     return { result: { error: `url must be at most ${MAX_FETCH_URL_LENGTH} characters` } };
   // The card, the stored effect and the request all use the URL the gate checked.
   if (fetchUrl) {
     args = { ...args, url: fetchUrl };
-    effectRequest = args;
+    effectRequest = name === "paid_request" ? paidRequestEffect(args) : args;
   }
   const connectorTrusts = connectorTrustKeys(
     name,
@@ -285,7 +290,7 @@ export async function gateToolCall(
       result: {
         error:
           approvalResolved.decision === "deny"
-            ? `${name} is blocked in this space. Don't try it another way; tell the user it's blocked.`
+            ? `${name} is blocked in this space${blockingRuleSuffix(approvalResolved)}. Don't try it another way; tell the user it's blocked.`
             : `${name} needs the owner's approval because it could have been asked for by someone else, and this space never asks. Don't retry; tell the user.`,
       },
     };
@@ -482,6 +487,15 @@ export async function gateToolCall(
   return { call };
 }
 
+function blockingRuleSuffix(resolved: ReturnType<typeof resolveActionApprovalForTools>): string {
+  const labels = decisiveActionApprovalRules(resolved).map((rule) => {
+    const value = rule.matchValue.trim().replace(/\s+/g, " ");
+    return JSON.stringify(rule.matchKind === "site" ? value : humanizeToolName(value));
+  });
+  if (labels.length === 0) return "";
+  return ` by the saved ${labels.length === 1 ? "rule" : "rules"} ${labels.join(", ")}`;
+}
+
 function createToolCall(
   ctx: RunContext,
   fields: Omit<ToolCall, "claimedEffect" | "persistEffectResult" | "finish" | "claimOrReturn">,
@@ -622,10 +636,7 @@ async function reviewToolCall(
   const { injectedReview, checker, reviewSettings, memberChecker } = review;
   if (!injectedReview && !checker && !reviewSettings?.backups.length) return;
   try {
-    const botDescription = redactSecrets(
-      `${bot.name}: ${bot.title}\n${bot.description}`,
-      ctx.secrets,
-    );
+    const botDescription = redactSecrets(`${bot.name}\n${bot.description}`, ctx.secrets);
     // A new site is judged on the full URL and the owner's own words only: the task
     // prompt of a webhook or bot-started run carries text someone else wrote.
     const reviewRequest: AutoReviewRequest =

@@ -11,11 +11,17 @@ import type { PrismaClient } from "@rakazo/db";
 import { RunHistoryWriteError } from "@rakazo/db";
 import { createLogger, createTestSink, installLogger } from "@rakazo/logging";
 import { describe, expect, it, vi } from "vitest";
+import { builtinAgentTools } from "./builtin-tools.js";
 import { createRunExecutor as createExecutor } from "./executor.js";
 import { UnavailableModelForAuthError, validateConnectedModelChoice } from "./model-selection.js";
+import {
+  filterImageReturningComputerTools,
+  IMAGE_RETURNING_COMPUTER_TOOLS,
+  modelAcceptsImageInput,
+} from "./model-vision.js";
 import { PRIVATE_MODEL_ENDPOINT_MESSAGE } from "./openai-compatible-url.js";
 import { RetiredModelCredentialError, serializeModelSecret } from "./pi-oauth.js";
-import { modelsForRequest } from "./pi-runtime-models.js";
+import { modelsForRequest, resolveRuntimeModel } from "./pi-runtime-models.js";
 import {
   dockerComputerToolInstruction,
   persistentComputerInstruction,
@@ -48,10 +54,10 @@ const createRunExecutor = (deps: Parameters<typeof createExecutor>[0]) =>
 
 describe("bot tool permissions", () => {
   it("never lets self-edit change disabled tools alongside an allowed field", () => {
-    expect(parseUpdateBotPatch({ name: "Scout", disabledBuiltinTools: [] }, "Bot")).toEqual({
+    expect(parseUpdateBotPatch({ name: "Scout", disabledBuiltinTools: [] })).toEqual({
       patch: { name: "Scout" },
     });
-    expect(parseUpdateBotPatch({ disabledBuiltinTools: [] }, "Scout")).toHaveProperty("error");
+    expect(parseUpdateBotPatch({ disabledBuiltinTools: [] })).toHaveProperty("error");
   });
 
   it("filters history and app connection tools without widening the capability-gated selection", () => {
@@ -1161,7 +1167,6 @@ function pinnedRoutineRunPrisma(modelId: string) {
     connection: { findMany: vi.fn(async () => []) },
     taughtSkill: { findMany: vi.fn(async () => []) },
     vaultCredential: { findMany: vi.fn(async () => []) },
-    agentSecret: { findMany: vi.fn(async () => []) },
     agentSkill: { findMany: vi.fn(async () => []) },
     scratchpadItem: { findMany: vi.fn(async () => []) },
   };
@@ -1194,49 +1199,49 @@ async function continuePinnedRoutineRun(plaintext: string, modelId: string) {
 
 describe("parseUpdateBotPatch", () => {
   it("treats a blank bot_id as omitted, as providers send it", () => {
-    expect(parseUpdateBotPatch({ name: "Scout", bot_id: "" }, "Chief")).toEqual({
+    expect(parseUpdateBotPatch({ name: "Scout", bot_id: "" })).toEqual({
       patch: { name: "Scout" },
     });
   });
 
   it("accepts notifyOnFinish on its own", () => {
-    expect(parseUpdateBotPatch({ notifyOnFinish: false }, "Chief")).toEqual({
+    expect(parseUpdateBotPatch({ notifyOnFinish: false })).toEqual({
       patch: { notifyOnFinish: false },
     });
-    expect(parseUpdateBotPatch({ notifyOnFinish: true }, "Chief")).toEqual({
+    expect(parseUpdateBotPatch({ notifyOnFinish: true })).toEqual({
       patch: { notifyOnFinish: true },
     });
   });
 
   it("accepts notify_on_finish as an alias", () => {
-    expect(parseUpdateBotPatch({ notify_on_finish: false }, "Chief")).toEqual({
+    expect(parseUpdateBotPatch({ notify_on_finish: false })).toEqual({
       patch: { notifyOnFinish: false },
     });
   });
 
   it("keeps name patches and notifyOnFinish together", () => {
-    expect(parseUpdateBotPatch({ name: "Scout", notifyOnFinish: false }, "Chief")).toEqual({
+    expect(parseUpdateBotPatch({ name: "Scout", notifyOnFinish: false })).toEqual({
       patch: { name: "Scout", notifyOnFinish: false },
     });
   });
 
   it("rejects a non-boolean notifyOnFinish", () => {
-    expect(parseUpdateBotPatch({ notifyOnFinish: "false" }, "Chief")).toEqual({
+    expect(parseUpdateBotPatch({ notifyOnFinish: "false" })).toEqual({
       error: "notifyOnFinish must be true or false.",
     });
   });
 
   it("requires at least one supported field", () => {
-    expect(parseUpdateBotPatch({}, "Chief")).toEqual({
+    expect(parseUpdateBotPatch({})).toEqual({
       error:
-        "Provide at least one of name, title, description, notifyOnFinish, color, artifact_id, or use_attached_image.",
+        "Provide at least one of name, description, notifyOnFinish, color, artifact_id, or use_attached_image.",
     });
   });
 
   it("leaves avatar-only args for the executor to resolve", () => {
-    expect(parseUpdateBotPatch({ color: "#8B5CF6" }, "Chief")).toEqual({ patch: {} });
-    expect(parseUpdateBotPatch({ artifact_id: "art-1" }, "Chief")).toEqual({ patch: {} });
-    expect(parseUpdateBotPatch({ use_attached_image: true }, "Chief")).toEqual({ patch: {} });
+    expect(parseUpdateBotPatch({ color: "#8B5CF6" })).toEqual({ patch: {} });
+    expect(parseUpdateBotPatch({ artifact_id: "art-1" })).toEqual({ patch: {} });
+    expect(parseUpdateBotPatch({ use_attached_image: true })).toEqual({ patch: {} });
   });
 });
 
@@ -1290,7 +1295,7 @@ describe("userTurnInstructions", () => {
     "A bot and a subagent are different. Never use both for the same request.",
     "create_space proposes a new privacy boundary inside the current organization. Use it when the user asks to create a space or separate data between teams or projects. Never claim the space exists before the tool succeeds.",
     "spawn_bot creates a lasting regular bot (own chat, computer, memory) that appears in the user's bot list. If the user asked to create a bot, call spawn_bot once and stop. Do not run_subagent to demo it.",
-    "update_bot updates this bot's own name (chat header / list label), title, description, avatar, and notifyOnFinish. Your description is the short public summary teammates see; it does not change your instructions. When the user asks you to rename yourself, change your title or description, change your profile picture, or turn finish notifications on or off, call update_bot — do not claim you changed them without the tool. Pass color for a hex or encoded shape, artifact_id for an image in this space, or use_attached_image when they attached a picture on this message.",
+    "update_bot updates this bot's own name (chat header / list label), description, avatar, and notifyOnFinish. Your description is the one-line public summary teammates see; your instructions are private and say how you do your job. When you have no instructions yet and your job becomes clear, set them with update_bot; after that, propose changes with propose_instructions_update. When the user asks you to rename yourself, change your description, change your profile picture, or turn finish notifications on or off, call update_bot — do not claim you changed them without the tool. Pass color for a hex or encoded shape, artifact_id for an image in this space, or use_attached_image when they attached a picture on this message.",
     "run_subagent is a short helper inside this turn only. It is not a bot, has no thread, and does not show in the list. Use it for parallel work you will summarize here.",
   ];
   const archiveBot =
@@ -2898,7 +2903,6 @@ description: Prepare standup notes
           ),
         },
         taughtSkill: { findMany: vi.fn(async () => []) },
-        agentSecret: { findMany: vi.fn(async () => []) },
         vaultCredential: { findMany: vi.fn(async () => []) },
         agentSkill: { findMany: vi.fn(async () => []) },
         scratchpadItem: { findMany: vi.fn(async () => []) },
@@ -3012,7 +3016,6 @@ description: Prepare standup notes
       deploymentSettings: { findUnique: vi.fn(async () => null) },
       taughtSkill: { findMany: vi.fn(async () => []) },
       vaultCredential: { findMany: vi.fn(async () => []) },
-      agentSecret: { findMany: vi.fn(async () => []) },
       agentSkill: { findMany: vi.fn(async () => []) },
       scratchpadItem: { findMany: vi.fn(async () => []) },
     } as unknown as PrismaClient;
@@ -3130,7 +3133,6 @@ description: Prepare standup notes
       deploymentSettings: { findUnique: vi.fn(async () => null) },
       taughtSkill: { findMany: vi.fn(async () => []) },
       vaultCredential: { findMany: vi.fn(async () => []) },
-      agentSecret: { findMany: vi.fn(async () => []) },
       agentSkill: { findMany: vi.fn(async () => []) },
       scratchpadItem: { findMany: vi.fn(async () => []) },
     } as unknown as PrismaClient;
@@ -3689,6 +3691,84 @@ description: Prepare standup notes
       expect.objectContaining({ waitMs: expect.any(Number) }),
     );
   });
+
+  it.each([true, false])(
+    "keeps a live-only Codex model's image support aligned with the account catalog (%s)",
+    async (supportsImages) => {
+      const provider = "openai-codex";
+      const modelId = "gpt-6.1-terra";
+      const plaintext = JSON.stringify({
+        type: "oauth",
+        access: "access-token",
+        refresh: "refresh-token",
+        expires: Date.now() + 3_600_000,
+        accountId: "acct-live",
+      });
+      const prisma = {
+        bot: {
+          findFirst: vi.fn(async () => ({
+            modelProvider: provider,
+            modelId,
+            thinkingLevel: null,
+          })),
+        },
+        userModelPreference: {
+          findFirst: vi.fn(async () =>
+            modelPreference({
+              provider,
+              secretId: "secret-codex",
+              modelId,
+            }),
+          ),
+        },
+        userModelCredential: {
+          findMany: vi.fn(async () => []),
+          findFirst: vi.fn(async () => null),
+        },
+        deploymentSettings: { findUnique: vi.fn(async () => null) },
+        secret: {
+          findFirst: vi.fn(async () => ({ id: "secret-codex", ciphertext: plaintext })),
+          findUnique: vi.fn(async () => null),
+        },
+      } as unknown as PrismaClient;
+      const read = vi.fn(async () => [
+        {
+          slug: modelId,
+          reasoningEfforts: ["low"],
+          supportsImages,
+          supportsFastTier: false,
+        },
+      ]);
+      const executor = createRunExecutor({
+        prisma,
+        secretStore: { load: vi.fn(() => plaintext), put: vi.fn() },
+        codexCatalog: { read },
+      } as unknown as Parameters<typeof createRunExecutor>[0]);
+
+      const model = await executor.resolveModel({
+        userId: "user-1",
+        spaceId: "ws-1",
+        botId: "bot-1",
+      });
+
+      expect(model).toMatchObject({ provider, id: modelId, acceptsImages: supportsImages });
+      expect(modelAcceptsImageInput(provider, modelId, model?.acceptsImages)).toBe(supportsImages);
+      expect(
+        resolveRuntimeModel({
+          provider,
+          id: modelId,
+          acceptsImages: model?.acceptsImages,
+        }).model?.input.includes("image"),
+      ).toBe(supportsImages);
+      const names = filterImageReturningComputerTools(
+        builtinAgentTools,
+        Boolean(model && modelAcceptsImageInput(provider, modelId, model.acceptsImages)),
+      ).map((tool) => tool.name);
+      for (const name of IMAGE_RETURNING_COMPUTER_TOOLS) {
+        expect(names.includes(name)).toBe(supportsImages);
+      }
+    },
+  );
 
   it("still rejects Codex Spark when the live catalog omits it", async () => {
     const provider = "openai-codex";

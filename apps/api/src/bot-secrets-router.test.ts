@@ -1,5 +1,6 @@
 import { RPCHandler } from "@orpc/server/fetch";
 import type { Actor } from "@rakazo/contracts";
+import { encodeLoginSecret } from "@rakazo/contracts";
 import type { PrismaClient } from "@rakazo/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RouterDeps } from "./router.js";
@@ -80,7 +81,13 @@ function botSecretDeps(seed: Row[] = []) {
       }),
     },
     vaultCredential: botSecret,
-    spaceSettingOverride: { findUnique: vi.fn(async () => null) },
+    // Counted before a prepared value that was never committed is deleted from the store.
+    secret: { count: vi.fn(async () => 0) },
+    botSecret: { count: vi.fn(async () => 0) },
+    integrationProviderConfig: { count: vi.fn(async () => 0) },
+    spaceSettingOverride: {
+      findUnique: vi.fn<() => Promise<{ setting: string } | null>>(async () => null),
+    },
     // The member's settings lock always finds the membership row.
     $queryRaw: vi.fn(async () => [{ locked: 1 }]),
     $transaction: vi.fn(),
@@ -94,6 +101,7 @@ function botSecretDeps(seed: Row[] = []) {
     })),
     // The fake store's ciphertext is "enc:<id>"; reading it back returns what put saved.
     load: vi.fn(async (ciphertext: string) => saved.get(ciphertext) ?? ""),
+    delete: vi.fn(async () => undefined),
   };
   const saved = new Map<string, string>();
   secrets.put.mockImplementation(async (plaintext, _context, options) => {
@@ -348,7 +356,7 @@ describe("botSecrets router", () => {
         value,
       });
       expect(result.status).toBe(400);
-      expect(result.text).toContain("A website login needs a username and password");
+      expect(result.text).toContain("A website login needs a label and a value for every field");
       expect(result.text).not.toContain(FAKE_VALUE);
       expect(secrets.put).not.toHaveBeenCalled();
     }
@@ -508,7 +516,8 @@ describe("vault router", () => {
   });
 
   it("keeps a Space's own vault apart from the account vault", async () => {
-    const { rows, call } = botSecretDeps();
+    const { prisma, rows, call } = botSecretDeps();
+    prisma.spaceSettingOverride.findUnique.mockResolvedValue({ setting: "credentials" });
     await call("vault/put", { scope: "space", destination, value: FAKE_VALUE });
     expect(rows).toEqual([expect.objectContaining({ spaceId: "space-1", name: "portal" })]);
     expect((await call("vault/list", { scope: "account" })).body.json).toEqual([]);
@@ -545,7 +554,7 @@ describe("vault router", () => {
     expect((await call("vault/reveal", { name: "missing" })).status).toBe(404);
   });
 
-  it("reveals a website login's username and password", async () => {
+  it("saves an older app's username and password as fields and reveals them", async () => {
     const { auth, call } = botSecretDeps();
     auth.hasRecentIdentityConfirmation.mockResolvedValue(true);
     await call("vault/put", {
@@ -553,8 +562,46 @@ describe("vault router", () => {
       value: JSON.stringify({ username: "person@example.test", password: FAKE_VALUE }),
     });
     expect((await call("vault/reveal", { name: "site" })).body.json).toEqual({
-      username: "person@example.test",
-      password: FAKE_VALUE,
+      fields: [
+        { label: "Username", value: "person@example.test", hidden: false },
+        { label: "Password", value: FAKE_VALUE, hidden: true },
+      ],
     });
+  });
+
+  it("reveals a website login's fields in order", async () => {
+    const { auth, call } = botSecretDeps();
+    auth.hasRecentIdentityConfirmation.mockResolvedValue(true);
+    const fields = [
+      { label: "Account number", value: "12345678", hidden: false },
+      { label: "Date of birth", value: FAKE_VALUE, hidden: true },
+    ];
+    await call("vault/put", {
+      destination: { name: "site", origin: "https://login.example.test", auth: { type: "login" } },
+      value: encodeLoginSecret({ fields }),
+    });
+    expect((await call("vault/reveal", { name: "site" })).body.json).toEqual({ fields });
+  });
+
+  it("refuses a save the Space stops customizing while it is being prepared", async () => {
+    const { prisma, secrets, rows, call } = botSecretDeps();
+    // Customized when the save is prepared, back on the account vault by the time it stores.
+    prisma.spaceSettingOverride.findUnique.mockResolvedValueOnce({ setting: "credentials" });
+    const refused = await call("vault/put", { scope: "space", destination, value: FAKE_VALUE });
+    expect(refused.status).toBe(400);
+    expect(refused.text).toContain("This Space uses the account vault");
+    expect(rows).toEqual([]);
+    expect(secrets.put).toHaveBeenCalledOnce();
+    const prepared = await secrets.put.mock.results[0]!.value;
+    expect(secrets.delete).toHaveBeenCalledWith(prepared.ciphertext, expect.anything());
+  });
+
+  it("refuses to save into a Space's own vault the Space no longer uses", async () => {
+    const { rows, call } = botSecretDeps();
+    const refused = await call("vault/put", { scope: "space", destination, value: FAKE_VALUE });
+    expect(refused.status).toBe(400);
+    expect(refused.text).toContain("This Space uses the account vault");
+    expect(refused.text).not.toContain(FAKE_VALUE);
+    expect(rows).toEqual([]);
   });
 });

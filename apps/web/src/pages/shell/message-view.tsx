@@ -1,6 +1,11 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import { ChatMarkdown, LinkifiedText, withBlockMentions } from "@rakazo/chat-ui/web";
-import type { MessageReaction, ThreadMessage } from "@rakazo/contracts";
+import type {
+  BotAvatarSet,
+  LoginFieldInput,
+  MessageReaction,
+  ThreadMessage,
+} from "@rakazo/contracts";
 import type { ChildBotBlock } from "@rakazo/core";
 import { isPeerReceiptBlocks, isSecretAskBlock, isToolActivityBlock } from "@rakazo/core";
 import { BotAvatar, Button, cn, resolvePersonaColorDef } from "@rakazo/ui-web";
@@ -80,7 +85,7 @@ export const MessageView = memo(function MessageView({
   onAnswer: (
     message: ThreadMessage,
     text: string,
-    username?: string,
+    fields?: LoginFieldInput[],
     dismiss?: boolean,
   ) => Promise<void>;
   onOpenBot: (botId: string) => void;
@@ -90,7 +95,9 @@ export const MessageView = memo(function MessageView({
   onTogglePeerReplies: (markerId: string) => void;
   speakerName?: string;
   memberName?: (botId: string | undefined) => string | undefined;
-  peerBot: (botId: string) => { name?: string; color: string; status?: string } | undefined;
+  peerBot: (
+    botId: string,
+  ) => { name?: string; color: string; status?: string; avatarSet?: BotAvatarSet } | undefined;
   replyParent?: ThreadMessage;
   onJumpToMessage?: (messageId: string) => void;
   onRefresh: () => Promise<void>;
@@ -135,7 +142,12 @@ export const MessageView = memo(function MessageView({
   const renderMention = (id: string) => {
     const block = mentions?.find((bot) => bot.botId === id);
     return block ? (
-      <BotMention block={block} color={peerBot(id)?.color} onOpenBot={onOpenBot} />
+      <BotMention
+        block={block}
+        avatarSet={peerBot(id)?.avatarSet}
+        color={peerBot(id)?.color}
+        onOpenBot={onOpenBot}
+      />
     ) : undefined;
   };
   const replyBotId = message.replyPreview?.botId ?? replyParent?.botId;
@@ -154,6 +166,7 @@ export const MessageView = memo(function MessageView({
         >
           <BotAvatar
             color={speakerBot?.color ?? FALLBACK_BOT_COLOR}
+            avatarSet={speakerBot?.avatarSet}
             identity={message.botId}
             size={22}
           />
@@ -182,7 +195,8 @@ export const MessageView = memo(function MessageView({
     textAnchorIndex === -1
       ? message.blocks.findIndex((block) => block.kind === "ask")
       : textAnchorIndex;
-  const hoverActions = isPeerReceiptBlocks(message.blocks) ? null : (
+  const peerReceipt = isPeerReceiptBlocks(message.blocks);
+  const hoverActions = peerReceipt ? null : (
     <MessageHoverActions
       message={message}
       side={message.role === "user" ? "start" : "end"}
@@ -270,7 +284,12 @@ export const MessageView = memo(function MessageView({
   return (
     <>
       {messageContext}
-      <div className={cn("relative flex flex-col gap-2", message.role === "user" && "items-end")}>
+      <div
+        className={cn(
+          "relative flex flex-col gap-2",
+          message.role === "user" && !peerReceipt && "items-end",
+        )}
+      >
         {blocks.map((block, i) => {
           if (block.kind === "steps" && shouldRenderToolCard(block, showToolActivity)) {
             return (
@@ -309,6 +328,7 @@ export const MessageView = memo(function MessageView({
                 key={i}
                 ariaLabel={label}
                 color={peerBot(peerBotId)?.color ?? FALLBACK_BOT_COLOR}
+                avatarSet={peerBot(peerBotId)?.avatarSet}
                 identity={peerBotId}
                 label={label}
                 onClick={() => onOpenPeerMessages({ peerBotId, peerBotName: peer })}
@@ -378,6 +398,7 @@ export const MessageView = memo(function MessageView({
                 <BotMention
                   block={block}
                   color={peerBot(block.botId)?.color}
+                  avatarSet={peerBot(block.botId)?.avatarSet}
                   onOpenBot={onOpenBot}
                 />
                 {block.status === "created" ? null : (
@@ -549,7 +570,7 @@ export const MessageView = memo(function MessageView({
                   block={block}
                   canAnswer={canAnswer}
                   canDismiss={canDismiss}
-                  onAnswer={(text, username) => onAnswer(message, text, username)}
+                  onAnswer={(text, fields) => onAnswer(message, text, fields)}
                   onDismiss={() => onAnswer(message, "", undefined, true)}
                 />
                 {i === hoverAnchorIndex ? hoverActions : null}
@@ -613,10 +634,12 @@ export const MessageView = memo(function MessageView({
 function BotMention({
   block,
   color,
+  avatarSet,
   onOpenBot,
 }: {
   block: ChildBotBlock;
   color: string | undefined;
+  avatarSet?: BotAvatarSet;
   onOpenBot: (botId: string) => void;
 }) {
   const live = block.status === "created" && color;
@@ -645,7 +668,7 @@ function BotMention({
       className="-mx-1 inline-flex items-baseline gap-1.5 rounded-md px-1 transition-colors hover:bg-accent"
     >
       <span className="self-center">
-        <BotAvatar color={color} identity={block.botId} size={18} />
+        <BotAvatar avatarSet={avatarSet} color={color} identity={block.botId} size={18} />
       </span>
       {name}
     </button>

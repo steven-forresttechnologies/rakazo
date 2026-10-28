@@ -26,24 +26,32 @@ import {
   syncBillingSnapshot,
 } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
+import { createReferrals } from "./referrals.js";
 
 export const TRIAL_DAYS = 7;
 const PRICE_CACHE_MS = 60 * 60 * 1000;
 /** Stripe returns here after checkout; served by the API through the web origin. */
 export const BILLING_RETURN_PATH = "/api/v1/billing/return";
 
+/** Where checkout was opened; the mobile app's in-app browser closes on the return. */
+export type BillingClient = "mobile" | undefined;
+
 /** Product-side billing: access rules, checkout, and pull-based sync from the provider. */
 export interface BillingService {
   readonly modelCreditsEnabled: boolean;
   status(actor: Actor): Promise<BillingStatus>;
-  selectFunding(actor: Actor, funding: "byok" | "credits"): Promise<{ ok: true; url?: string }>;
+  selectFunding(
+    actor: Actor,
+    funding: "byok" | "credits",
+    client?: BillingClient,
+  ): Promise<{ ok: true; url?: string }>;
   purchaseCredits(
     actor: Actor,
-    input: { amountCents: number; monthly: boolean },
+    input: { amountCents: number; monthly: boolean; client?: BillingClient },
   ): Promise<{ url: string }>;
   setMonthlyCredits(actor: Actor, amountCents: number): Promise<{ ok: true }>;
-  checkout(actor: Actor): Promise<{ url: string }>;
-  portal(actor: Actor): Promise<{ url: string }>;
+  checkout(actor: Actor, client?: BillingClient): Promise<{ url: string }>;
+  portal(actor: Actor, client?: BillingClient): Promise<{ url: string }>;
   /** Re-fetches the customer's subscription from the provider and overwrites the stored snapshot. */
   sync(customerId: string): Promise<void>;
   /** Syncs the actor's organization, e.g. on return from checkout before the webhook lands. */
@@ -51,6 +59,7 @@ export interface BillingService {
   /** Pushes the organization's member count to the provider. Call when members change. */
   syncSeats(organizationId: string): Promise<void>;
   cancelForDeletedUser(userId: string): Promise<void>;
+  claimReferral(actor: Actor, code: string): Promise<void>;
 }
 
 /**
@@ -73,7 +82,11 @@ export function createBillingService(deps: {
 }): BillingService {
   const { prisma, provider } = deps;
   const appUrl = `${deps.webOrigin}/app`;
+  const returnUrl = `${deps.webOrigin}${BILLING_RETURN_PATH}`;
+  /** A mobile checkout returns through the API either way, which hands back to the app. */
+  const mobileReturnUrl = `${returnUrl}?client=mobile`;
   const modelCredits = provider.describe().capabilities.modelCredits === true;
+  const referrals = createReferrals(deps);
   let cachedPrice: { value: BillingPrice; expiresAt: number } | undefined;
 
   async function price(): Promise<BillingPrice | null> {
@@ -134,6 +147,8 @@ export function createBillingService(deps: {
       return;
     }
     const live = snapshot;
+    if (live && hasBillingAccess(live.status))
+      await referrals.settle(previous.organizationId, live.cardFingerprint);
     if (!modelCredits || !live) return;
     // A newly paid own-key plan becomes the funding, wherever its checkout returned.
     if (
@@ -211,7 +226,7 @@ export function createBillingService(deps: {
     );
   }
 
-  async function byokCheckout(actor: Actor, organizationId: string) {
+  async function byokCheckout(actor: Actor, organizationId: string, client: BillingClient) {
     const amountCents = BYOK_MONTHLY_PRICE_CENTS;
     if (amountCents === null || !provider.createByokCheckout) throw new ORPCError("NOT_FOUND");
     const [account, credits] = await Promise.all([
@@ -224,8 +239,8 @@ export function createBillingService(deps: {
           customerId,
           amountCents,
           ...(byokTrialAvailable(account, credits) ? { trialDays: TRIAL_DAYS } : {}),
-          successUrl: `${deps.webOrigin}${BILLING_RETURN_PATH}`,
-          cancelUrl: appUrl,
+          successUrl: client === "mobile" ? mobileReturnUrl : returnUrl,
+          cancelUrl: client === "mobile" ? mobileReturnUrl : appUrl,
         }),
       );
     } catch (error) {
@@ -237,7 +252,7 @@ export function createBillingService(deps: {
 
   return {
     modelCreditsEnabled: modelCredits,
-    async selectFunding(actor, funding) {
+    async selectFunding(actor, funding, client) {
       const { organizationId } = await managedOrganization(actor);
       const account = await creditAccount(prisma, organizationId);
       const subscription = await billingAccountForOrganization(prisma, organizationId);
@@ -255,7 +270,7 @@ export function createBillingService(deps: {
         funding === "byok" &&
         !hasModelAccess({ ...account, mode: "byok" }, subscription?.status ?? null)
       )
-        return { ok: true, ...(await byokCheckout(actor, organizationId)) };
+        return { ok: true, ...(await byokCheckout(actor, organizationId, client)) };
       await prisma.modelCreditAccount.update({
         where: { organizationId },
         data: {
@@ -266,7 +281,7 @@ export function createBillingService(deps: {
       return { ok: true };
     },
 
-    async purchaseCredits(actor, input) {
+    async purchaseCredits(actor, { client, ...input }) {
       if (!modelCredits || !provider.createCreditCheckout) throw new ORPCError("NOT_FOUND");
       if (deps.managedModelsAvailable === false) throw new ORPCError("PRECONDITION_FAILED");
       const { organizationId } = await managedOrganization(actor);
@@ -277,8 +292,8 @@ export function createBillingService(deps: {
           provider.createCreditCheckout!({
             customerId,
             ...input,
-            successUrl: `${deps.webOrigin}${BILLING_RETURN_PATH}`,
-            cancelUrl: `${appUrl}?billing=canceled`,
+            successUrl: client === "mobile" ? mobileReturnUrl : returnUrl,
+            cancelUrl: client === "mobile" ? mobileReturnUrl : `${appUrl}?billing=canceled`,
           }),
         );
         await prisma.modelCreditAccount.update({
@@ -349,6 +364,7 @@ export function createBillingService(deps: {
           currentPeriodEndsAt: account?.currentPeriodEndsAt?.toISOString() ?? null,
           cancelAtPeriodEnd: account?.cancelAtPeriodEnd ?? false,
           hasCustomer: Boolean(account),
+          referral: await referrals.status(organizationId, account, isOwner),
         };
       }
       const { organizationId, isOwner } = await organization(actor);
@@ -369,12 +385,13 @@ export function createBillingService(deps: {
         currentPeriodEndsAt: account?.currentPeriodEndsAt?.toISOString() ?? null,
         cancelAtPeriodEnd: account?.cancelAtPeriodEnd ?? false,
         hasCustomer: Boolean(account),
+        referral: await referrals.status(organizationId, account, isOwner),
       };
     },
 
-    async checkout(actor) {
+    async checkout(actor, client) {
       const { organizationId } = await managedOrganization(actor);
-      if (modelCredits) return byokCheckout(actor, organizationId);
+      if (modelCredits) return byokCheckout(actor, organizationId, client);
       let account = await billingAccountForOrganization(prisma, organizationId);
       if (account) {
         // Decide from the provider, not a snapshot a missed webhook may have left stale.
@@ -400,8 +417,8 @@ export function createBillingService(deps: {
             customerId,
             seats,
             ...trial,
-            successUrl: `${deps.webOrigin}${BILLING_RETURN_PATH}`,
-            cancelUrl: appUrl,
+            successUrl: client === "mobile" ? mobileReturnUrl : returnUrl,
+            cancelUrl: client === "mobile" ? mobileReturnUrl : appUrl,
           }),
         );
       } catch (error) {
@@ -411,12 +428,15 @@ export function createBillingService(deps: {
       }
     },
 
-    async portal(actor) {
+    async portal(actor, client) {
       const { organizationId } = await managedOrganization(actor);
       const account = await billingAccountForOrganization(prisma, organizationId);
       if (!account) throw new ORPCError("NOT_FOUND", { message: "No billing account" });
       return withLiveCustomer(actor, account, (customerId) =>
-        provider.createPortal({ customerId, returnUrl: appUrl }),
+        provider.createPortal({
+          customerId,
+          returnUrl: client === "mobile" ? mobileReturnUrl : appUrl,
+        }),
       );
     },
 
@@ -435,6 +455,11 @@ export function createBillingService(deps: {
       if (account.seats === seats) return;
       await provider.updateSeats(account.customerId, seats);
       await sync(account.customerId);
+    },
+
+    async claimReferral(actor, code) {
+      const { organizationId, isOwner } = await organization(actor);
+      if (isOwner) await referrals.claim(organizationId, code);
     },
 
     async cancelForDeletedUser(userId) {

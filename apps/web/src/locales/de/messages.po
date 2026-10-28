@@ -22,6 +22,37 @@ msgstr " (ungelesen)"
 msgid "{0, plural, one {# bot has its own model:} other {# bots have their own model:}}"
 msgstr ""
 
+#. placeholder {0}: servers.length
+#: src/pages/PluginsOverlay.tsx
+msgid "{0, plural, one {# connector} other {# connectors}}"
+msgstr ""
+
+#. placeholder {0}: skill.files.length
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "{0, plural, one {# file} other {# files}}"
+msgstr ""
+
+#. placeholder {0}: referral.rewards
+#: src/components/InviteDialog.tsx
+msgid "{0, plural, one {# free month earned} other {# free months earned}}"
+msgstr "{0, plural, one {# Gratismonat verdient} other {# Gratismonate verdient}}"
+
+#. placeholder {0}: skills.length - shownSkills.length
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "{0, plural, one {# more} other {# more}}"
+msgstr ""
+
+#. placeholder {0}: skillCount(install)
+#: src/components/integrations/skills-dialog.tsx
+msgid "{0, plural, one {# skill} other {# skills}}"
+msgstr ""
+
+#. placeholder {0}: availability.spaceIds.length
+#. placeholder {0}: chosen.length
+#: src/components/integrations/space-availability.tsx
+msgid "{0, plural, one {# space} other {# spaces}}"
+msgstr ""
+
 #. placeholder {0}: pinned.length
 #: src/pages/model-settings/space-bots-model.tsx
 msgid "{0, plural, one {Switch # bot to the space default?} other {Switch # bots to the space default?}}"
@@ -135,6 +166,10 @@ msgstr "Computer von {botName}"
 #: src/components/VaultSettings.tsx
 msgid "{commandVariable} is reserved and cannot be used as a command variable. Choose another name."
 msgstr "{commandVariable} ist reserviert und kann nicht als Befehlsvariable verwendet werden. Wähle einen anderen Namen."
+
+#: src/pages/PluginsOverlay.tsx
+msgid "{connectedCount, plural, one {# connected} other {# connected}}"
+msgstr ""
 
 #: src/components/markdown-copy.tsx
 msgid "{count, plural, one {# row} other {# rows}}"
@@ -326,6 +361,10 @@ msgstr ""
 msgid "{size} B"
 msgstr "{size} B"
 
+#: src/pages/PluginsOverlay.tsx
+msgid "{skillCount, plural, one {# skill} other {# skills}}"
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
 msgid "{summary} Backup models failed or were unavailable for this request."
@@ -369,6 +408,10 @@ msgstr "@{0}"
 #. placeholder {0}: status.byokPriceCents / 100
 #: src/components/ModelCredits.tsx
 msgid "${0} / month"
+msgstr ""
+
+#: src/components/integrations/space-availability.tsx
+msgid "1 space"
 msgstr ""
 
 #: src/pages/shell/message-cards.tsx
@@ -439,6 +482,7 @@ msgstr ""
 msgid "Activity"
 msgstr "Aktivität"
 
+#: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
@@ -458,10 +502,6 @@ msgstr "Füge einen auszuführenden Befehl hinzu"
 #: src/pages/RoutineEditor.tsx
 msgid "Add a file or folder to watch"
 msgstr "Füge eine zu überwachende Datei oder einen Ordner hinzu"
-
-#: src/pages/shell/bot-panel.tsx
-msgid "Add a label"
-msgstr "Label hinzufügen"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
@@ -505,20 +545,16 @@ msgid "Add credits"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
-msgid "Add Executor"
-msgstr "Executor hinzufügen"
+msgid "Add custom"
+msgstr ""
 
 #: src/pages/ModelRoleSettings.tsx
 msgid "Add fallback"
 msgstr "Fallback hinzufügen"
 
-#: src/pages/PluginsOverlay.tsx
-msgid "Add GraphQL"
-msgstr "GraphQL hinzufügen"
-
-#: src/pages/PluginsOverlay.tsx
-msgid "Add GraphQL endpoint"
-msgstr "GraphQL-Endpunkt hinzufügen"
+#: src/components/LoginFields.tsx
+msgid "Add field"
+msgstr "Feld hinzufügen"
 
 #: src/components/ModelHeadersEditor.tsx
 msgid "Add header"
@@ -529,17 +565,12 @@ msgid "Add item"
 msgstr "Element hinzufügen"
 
 #: src/components/integrations/IntegrationSetup.tsx
-#: src/pages/PluginsOverlay.tsx
 msgid "Add MCP server"
 msgstr "MCP-Server hinzufügen"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Add open work"
 msgstr "Offene Aufgabe hinzufügen"
-
-#: src/pages/PluginsOverlay.tsx
-msgid "Add OpenAPI"
-msgstr "OpenAPI hinzufügen"
 
 #: src/components/PasskeyOffer.tsx
 #: src/components/PasskeySettings.tsx
@@ -550,16 +581,16 @@ msgstr "Passkey hinzufügen"
 msgid "Add provider"
 msgstr "Anbieter hinzufügen"
 
-#: src/pages/PluginsOverlay.tsx
-msgid "Add remote MCP server"
-msgstr "Remote-MCP-Server hinzufügen"
-
 #: src/pages/McpServersOverlay.tsx
 msgid "Add server"
 msgstr "Server hinzufügen"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Add server URL"
+msgstr ""
+
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "Add skills"
 msgstr ""
 
 #: src/pages/shell/agent-import.tsx
@@ -570,10 +601,6 @@ msgstr "Zu einem bestehenden Bot hinzufügen"
 msgid "Add to routine"
 msgstr "Zur Routine hinzufügen"
 
-#: src/pages/PluginsOverlay.tsx
-msgid "Add Treg"
-msgstr "Treg hinzufügen"
-
 #: src/pages/RoutineEditor.tsx
 msgid "Add trigger"
 msgstr ""
@@ -582,10 +609,12 @@ msgstr ""
 msgid "Add workspace"
 msgstr "Workspace hinzufügen"
 
+#: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Added"
 msgstr ""
 
+#: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Adding…"
@@ -596,7 +625,6 @@ msgstr "Wird hinzugefügt…"
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -615,6 +643,10 @@ msgstr "Agent-Computer"
 msgid "Agents:"
 msgstr "Agents:"
 
+#: src/pages/PluginsOverlay.tsx
+msgid "All"
+msgstr ""
+
 #. placeholder {0}: amount / 100
 #: src/components/ModelCredits.tsx
 msgid "All ${0} goes to model usage."
@@ -625,6 +657,10 @@ msgstr "Die vollen ${0} fließen in die Modellnutzung."
 msgid "All bots"
 msgstr ""
 
+#: src/components/integrations/space-availability.tsx
+msgid "All spaces"
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "All statuses"
 msgstr ""
@@ -633,6 +669,7 @@ msgstr ""
 msgid "All time"
 msgstr ""
 
+#: src/components/ApprovalRulePreview.tsx
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow"
 msgstr "Erlauben"
@@ -648,6 +685,10 @@ msgstr ""
 #: src/components/AskCard.tsx
 msgid "Allow once"
 msgstr "Einmal erlauben"
+
+#: src/components/ApprovalRulePreview.tsx
+msgid "Allow rule"
+msgstr "Erlaubnisregel"
 
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Allow writing"
@@ -684,6 +725,10 @@ msgstr "Dieses Tool immer erlauben"
 #: src/components/AskCard.tsx
 msgid "Always allowed"
 msgstr "Immer erlaubt"
+
+#: src/components/markdown-link-prompt.tsx
+msgid "Always open {site}"
+msgstr "Immer {site} öffnen"
 
 #: src/lib/model-connection-preflight.ts
 msgid "An API key is stored for this provider, not a subscription sign-in."
@@ -794,6 +839,11 @@ msgstr "Genehmigen"
 msgid "Approve this server to let your agent use its tools."
 msgstr "Genehmige diesen Server, damit dein Agent seine Tools verwenden kann."
 
+#: src/components/integrations/plugin-marketplace.tsx
+#: src/pages/PluginsOverlay.tsx
+msgid "Apps"
+msgstr ""
+
 #: src/pages/BotContextMenu.tsx
 msgid "Archive"
 msgstr "Archivieren"
@@ -819,6 +869,10 @@ msgstr ""
 msgid "Ask"
 msgstr "Fragen"
 
+#: src/components/ApprovalRulePreview.tsx
+msgid "Ask rule"
+msgstr "Nachfrageregel"
+
 #. placeholder {0}: preset.time
 #: src/lib/cron.ts
 msgid "at {0}"
@@ -840,6 +894,10 @@ msgstr "Datei anhängen"
 #: src/pages/shell/chat-shared.ts
 msgid "Attachment"
 msgstr "Anhang"
+
+#: src/pages/PluginsOverlay.tsx
+msgid "Authentication"
+msgstr ""
 
 #: src/lib/model-connection-preflight.ts
 msgid "Authentication failed."
@@ -890,6 +948,10 @@ msgstr ""
 msgid "Available credits"
 msgstr ""
 
+#: src/components/integrations/space-availability.tsx
+msgid "Available in"
+msgstr ""
+
 #: src/components/VaultSettings.tsx
 msgid "Available to shell commands as {commandVariable}"
 msgstr "Für Shell-Befehle als {commandVariable} verfügbar"
@@ -898,6 +960,8 @@ msgstr "Für Shell-Befehle als {commandVariable} verfügbar"
 msgid "Avatar Studio"
 msgstr "Avatar-Studio"
 
+#: src/components/integrations/plugin-marketplace.tsx
+#: src/components/integrations/skills-dialog.tsx
 #: src/pages/Auth.tsx
 #: src/pages/Board.tsx
 #: src/pages/NavLinkPage.tsx
@@ -934,9 +998,14 @@ msgstr "Bearer-Token"
 msgid "Billing"
 msgstr ""
 
+#: src/components/ApprovalRulePreview.tsx
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Block"
 msgstr "Blockieren"
+
+#: src/components/ApprovalRulePreview.tsx
+msgid "Block rule"
+msgstr "Sperrregel"
 
 #: src/lib/ticket-status.ts
 msgid "Blocked"
@@ -1011,6 +1080,10 @@ msgstr ""
 msgid "Brain label"
 msgstr ""
 
+#: src/components/integrations/skills-dialog.tsx
+msgid "Browse"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Browse MCP servers"
 msgstr ""
@@ -1057,6 +1130,7 @@ msgstr "Kann keine Bilder lesen"
 
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
+#: src/components/integrations/plugin-marketplace.tsx
 #: src/components/markdown-link-prompt.tsx
 #: src/components/PasskeySettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
@@ -1069,7 +1143,7 @@ msgstr "Kann keine Bilder lesen"
 #: src/pages/model-settings/space-bots-model.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/PluginsOverlay.tsx
+#: src/pages/PaymentWalletSettingsPanel.tsx
 #: src/pages/shell/agent-import-undo.tsx
 #: src/pages/shell/create-bot-dialog.tsx
 #: src/pages/shell/dialogs.tsx
@@ -1101,6 +1175,10 @@ msgstr "abgebrochen"
 #: src/pages/ActivityList.tsx
 msgid "Cancelled"
 msgstr "Abgebrochen"
+
+#: src/components/ApprovalRulePreview.tsx
+msgid "Candidate rule"
+msgstr "Vorgeschlagene Regel"
 
 #: src/pages/Artifacts.tsx
 msgid "Card view"
@@ -1322,6 +1400,10 @@ msgstr "Panel schließen"
 msgid "Close preview"
 msgstr "Vorschau schließen"
 
+#: src/components/integrations/skills-dialog.tsx
+msgid "Close skills"
+msgstr ""
+
 #: src/components/markdown-copy.tsx
 msgid "Close table"
 msgstr "Tabelle schließen"
@@ -1390,6 +1472,10 @@ msgstr "Befehlsvariable"
 
 #: src/pages/Board.tsx
 msgid "Comment"
+msgstr ""
+
+#: src/pages/PluginsOverlay.tsx
+msgid "Communication"
 msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
@@ -1463,16 +1549,22 @@ msgstr ""
 msgid "Confirm password"
 msgstr "Passwort bestätigen"
 
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "Confirm removal"
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "Confirm the URL is reachable from this browser session, then test again."
 msgstr "Prüfe, ob die URL aus dieser Browsersitzung erreichbar ist, und teste erneut."
 
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/model-settings/role-model-picker.tsx
+#: src/pages/PaymentWalletSettingsPanel.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connect"
 msgstr "Verbinden"
@@ -1503,10 +1595,6 @@ msgstr "API-Schlüssel verbinden"
 msgid "Connect apps"
 msgstr "Apps verbinden"
 
-#: src/pages/PluginsOverlay.tsx
-msgid "Connect Executor"
-msgstr "Executor verbinden"
-
 #: src/pages/shell/message-cards.tsx
 msgid "Connect MCP server “{name}”"
 msgstr "MCP-Server „{name}“ verbinden"
@@ -1527,10 +1615,6 @@ msgstr "OAuth verbinden"
 msgid "Connect this model's provider first."
 msgstr "Verbinde zuerst den Anbieter dieses Modells."
 
-#: src/pages/PluginsOverlay.tsx
-msgid "Connect Treg"
-msgstr "Treg verbinden"
-
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
 msgid "Connect your own API key in Models or choose Rakazo credits in Billing."
@@ -1538,8 +1622,10 @@ msgstr "Verbinde deinen eigenen API-Schlüssel unter Modelle oder wähle Rakazo-
 
 #: src/components/ComputerDeviceSettings.tsx
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/MemorySettingsOverlay.tsx
+#: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connected"
@@ -1550,6 +1636,7 @@ msgstr "Verbunden"
 msgid "Connected {0}."
 msgstr "{0} verbunden."
 
+#: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -1572,6 +1659,10 @@ msgstr "Verbindungstest fehlgeschlagen."
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "Die Verbindung zu {0} steht noch aus. Du kannst dieses Fenster schließen und später erneut nachsehen."
 
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "Connector"
+msgstr ""
+
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/import-status.ts
 msgid "Contains code to run"
@@ -1588,6 +1679,7 @@ msgstr "Kontextlimit"
 #: src/pages/Auth.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/agent-import.tsx
+#: src/pages/shell/dialogs.tsx
 msgid "Continue"
 msgstr "Weiter"
 
@@ -1609,13 +1701,17 @@ msgid "Conversations"
 msgstr ""
 
 #: src/components/ComputersUnavailableHint.tsx
+#: src/components/InviteDialog.tsx
 #: src/components/markdown-copy.tsx
+#: src/components/VaultSettings.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/agent-import.tsx
 msgid "Copied"
 msgstr "Kopiert"
 
+#: src/components/InviteDialog.tsx
+#: src/components/VaultSettings.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/message-hover-actions.tsx
@@ -1654,6 +1750,10 @@ msgstr "Hinzufügen fehlgeschlagen"
 msgid "Could not add MCP server"
 msgstr "MCP-Server konnte nicht hinzugefügt werden"
 
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "Could not add skills"
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Could not approve this server"
 msgstr "Server konnte nicht genehmigt werden"
@@ -1669,6 +1769,10 @@ msgstr ""
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Could not change password"
 msgstr "Passwort konnte nicht geändert werden"
+
+#: src/components/integrations/space-availability.tsx
+msgid "Could not change where this is available"
+msgstr ""
 
 #: src/lib/model-connection-preflight.ts
 msgid "Could not check stored credentials."
@@ -1717,9 +1821,11 @@ msgid "Could not connect to the computer screen"
 msgstr ""
 
 #: src/components/AccountAccess.tsx
+#: src/components/AccountDataSettings.tsx
 #: src/components/ConfirmIdentityDialog.tsx
 #: src/components/PasskeyOffer.tsx
 #: src/components/PasskeySettings.tsx
+#: src/components/TrustedLinkSitesSettings.tsx
 #: src/lib/account-security.ts
 #: src/lib/sso-flow.ts
 #: src/lib/user-error.ts
@@ -1814,9 +1920,17 @@ msgstr "{0} konnte nicht heruntergeladen werden. Versuche es erneut."
 msgid "Could not download {name}. Try again."
 msgstr "{name} konnte nicht heruntergeladen werden. Versuche es erneut."
 
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "Could not enable tools"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not install connector"
 msgstr "Connector konnte nicht installiert werden"
+
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "Could not install plugin"
+msgstr ""
 
 #: src/components/ErrorBoundary.tsx
 #: src/components/PasskeySettings.tsx
@@ -1871,6 +1985,7 @@ msgstr "Ausführungsverlauf konnte nicht geladen werden"
 msgid "Could not load sign-in options"
 msgstr "Anmeldeoptionen konnten nicht geladen werden"
 
+#: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "Skill konnte nicht geladen werden"
@@ -1906,10 +2021,19 @@ msgstr ""
 msgid "Could not play a test clip"
 msgstr "Testclip konnte nicht abgespielt werden"
 
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "Could not preview plugin"
+msgstr ""
+
+#: src/components/ApprovalRulePreview.tsx
+msgid "Could not preview rule"
+msgstr "Regelvorschau fehlgeschlagen"
+
 #: src/lib/model-connection-preflight.ts
 msgid "Could not reach the model server."
 msgstr "Der Modellserver war nicht erreichbar."
 
+#: src/components/AccountDataSettings.tsx
 #: src/components/PasskeyOffer.tsx
 #: src/components/PasskeySettings.tsx
 #: src/lib/computer-sandbox.ts
@@ -1934,9 +2058,17 @@ msgstr "Entfernen fehlgeschlagen"
 msgid "Could not remove connector"
 msgstr "Connector konnte nicht entfernt werden"
 
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "Could not remove plugin"
+msgstr ""
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Could not remove rule"
 msgstr "Regel konnte nicht entfernt werden"
+
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "Could not remove skills"
+msgstr ""
 
 #: src/components/VaultSettings.tsx
 msgid "Could not remove the credential"
@@ -1975,6 +2107,7 @@ msgstr ""
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/dialogs.tsx
 #: src/pages/shell/use-space-roster.ts
 msgid "Could not save"
 msgstr "Speichern fehlgeschlagen"
@@ -2036,6 +2169,14 @@ msgstr "E-Mail zum Zurücksetzen konnte nicht gesendet werden"
 #: src/lib/call-session.ts
 msgid "Could not send that"
 msgstr "Senden fehlgeschlagen"
+
+#: src/components/VaultSettings.tsx
+msgid "Could not show the credential"
+msgstr "Zugangsdaten konnten nicht angezeigt werden"
+
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "Could not sign in"
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not start OAuth"
@@ -2105,12 +2246,20 @@ msgstr ""
 msgid "Couldn't load messaging settings"
 msgstr ""
 
+#: src/pages/PaymentWalletSettingsPanel.tsx
+msgid "Couldn't load your wallet"
+msgstr ""
+
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Couldn't update your timezone"
+msgstr ""
+
+#: src/pages/PaymentWalletSettingsPanel.tsx
+msgid "Couldn't update your wallet"
 msgstr ""
 
 #: src/pages/Board.tsx
@@ -2186,6 +2335,10 @@ msgstr "Cron"
 msgid "Cron expression"
 msgstr "Cron-Ausdruck"
 
+#: src/components/ApprovalRulePreview.tsx
+msgid "Current"
+msgstr "Aktuell"
+
 #: src/components/AccountAccess.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Current password"
@@ -2214,6 +2367,10 @@ msgstr "Bot-Avatar anpassen"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Dark"
 msgstr "Dunkel"
+
+#: src/pages/PluginsOverlay.tsx
+msgid "Data"
+msgstr ""
 
 #: src/lib/billing.ts
 #: src/lib/cron.ts
@@ -2341,9 +2498,12 @@ msgstr "Ablehnen"
 
 #: src/pages/Board.tsx
 #: src/pages/shell/agent-import.tsx
-#: src/pages/shell/bot-panel.tsx
 msgid "Description"
 msgstr "Beschreibung"
+
+#: src/pages/PluginsOverlay.tsx
+msgid "Design"
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 msgid "Desktop app"
@@ -2357,6 +2517,10 @@ msgstr ""
 #: src/pages/shell/composer-error.tsx
 msgid "Details"
 msgstr "Details"
+
+#: src/pages/PluginsOverlay.tsx
+msgid "Developer"
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Disable a tool"
@@ -2374,12 +2538,17 @@ msgstr "Aufnahme verwerfen"
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/PaymentWalletSettingsPanel.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Disconnect"
 msgstr "Trennen"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Disconnect {disconnectName}?"
+msgstr ""
+
+#: src/pages/PaymentWalletSettingsPanel.tsx
+msgid "Disconnect {name}?"
 msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -2416,10 +2585,6 @@ msgstr "Verworfen"
 msgid "Dismissed. Reconnect anytime from MCP settings."
 msgstr "Verworfen. Du kannst die Verbindung jederzeit in den MCP-Einstellungen wiederherstellen."
 
-#: src/pages/PluginsOverlay.tsx
-msgid "Display name"
-msgstr "Anzeigename"
-
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker"
 msgstr "Docker"
@@ -2444,6 +2609,7 @@ msgstr "Das Dokument wurde geändert. Öffne es erneut, um die neueste Version z
 msgid "Don’t have an account?"
 msgstr "Du hast noch kein Konto?"
 
+#: src/components/AccountDataSettings.tsx
 #: src/components/ToolActivityDisclosure.tsx
 #: src/lib/ticket-status.ts
 #: src/pages/ActivityList.tsx
@@ -2505,10 +2671,6 @@ msgid "Edit first"
 msgstr "Zuerst bearbeiten"
 
 #: src/pages/shell/bot-panel.tsx
-msgid "Edit label"
-msgstr "Label bearbeiten"
-
-#: src/pages/shell/bot-panel.tsx
 msgid "Edit name"
 msgstr "Namen bearbeiten"
 
@@ -2537,10 +2699,6 @@ msgstr "E-Mail-Verifizierung erforderlich"
 msgid "Enable {0}"
 msgstr "{0} aktivieren"
 
-#: src/components/VaultSettings.tsx
-msgid "Encrypted and never shown again"
-msgstr "Verschlüsselt und wird nie wieder angezeigt"
-
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Ends {day}"
 msgstr ""
@@ -2552,10 +2710,6 @@ msgstr ""
 #: src/lib/user-error.ts
 msgid "Enter a password"
 msgstr "Gib ein Passwort ein"
-
-#: src/components/VaultSettings.tsx
-msgid "Enter a username and password"
-msgstr ""
 
 #: src/lib/user-error.ts
 msgid "Enter a valid email"
@@ -2681,6 +2835,10 @@ msgstr "abgelaufen"
 msgid "Export"
 msgstr "Exportieren"
 
+#: src/components/AccountDataSettings.tsx
+msgid "Export data"
+msgstr "Daten exportieren"
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Export this week's list from the CRM and drop it in the shared folder"
 msgstr "Exportiere die Liste dieser Woche aus dem CRM und lege sie im freigegebenen Ordner ab"
@@ -2759,6 +2917,10 @@ msgstr ""
 msgid "Filters"
 msgstr "Filter"
 
+#: src/pages/PluginsOverlay.tsx
+msgid "Finance"
+msgstr ""
+
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
 msgid "Find models"
@@ -2816,6 +2978,11 @@ msgstr ""
 msgid "From {0}"
 msgstr ""
 
+#: src/components/integrations/skills-dialog.tsx
+#: src/pages/PluginsOverlay.tsx
+msgid "From GitHub"
+msgstr ""
+
 #: src/pages/WindowChrome.tsx
 msgid "Fullscreen"
 msgstr "Vollbild"
@@ -2828,6 +2995,10 @@ msgstr "Gateway-ID"
 #: src/pages/SettingsOverlay.tsx
 msgid "General"
 msgstr "Allgemein"
+
+#: src/components/InviteDialog.tsx
+msgid "Get a free month for each friend who starts a trial."
+msgstr "Erhalte einen Gratismonat für jeden Freund, der eine Testphase startet."
 
 #: src/components/SidebarFooter.tsx
 msgid "Get the mobile app"
@@ -2900,6 +3071,14 @@ msgstr "Beispiel anhören"
 msgid "Hi, this is how I'll sound when I read replies out loud."
 msgstr "Hallo, so klinge ich, wenn ich Antworten vorlese."
 
+#: src/components/LoginFields.tsx
+msgid "Hidden"
+msgstr "Verborgen"
+
+#: src/components/VaultSettings.tsx
+msgid "Hide"
+msgstr "Ausblenden"
+
 #: src/components/I18nBootstrap.tsx
 msgid "Hide password"
 msgstr ""
@@ -2948,6 +3127,10 @@ msgstr ""
 msgid "How often"
 msgstr "Wie oft"
 
+#: src/pages/shell/bot-panel.tsx
+msgid "How other bots see it"
+msgstr "So sehen andere Bots ihn"
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "How to check"
 msgstr "So wird geprüft"
@@ -2959,6 +3142,10 @@ msgstr ""
 #: src/pages/shell/computer-release-actions.tsx
 msgid "I’m done"
 msgstr "Ich bin fertig"
+
+#: src/pages/shell/avatar-studio-popover.tsx
+msgid "Icon set"
+msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
@@ -2992,9 +3179,9 @@ msgstr "Importieren"
 msgid "Import an agent"
 msgstr "Agent importieren"
 
-#: src/pages/PluginsOverlay.tsx
-msgid "Import OpenAPI JSON"
-msgstr "OpenAPI-JSON importieren"
+#: src/components/AccountDataSettings.tsx
+msgid "Import data"
+msgstr "Daten importieren"
 
 #: src/pages/shell/composer.tsx
 msgid "Import this agent as a bot?"
@@ -3006,6 +3193,10 @@ msgstr ""
 
 #: src/lib/ticket-status.ts
 msgid "In review"
+msgstr ""
+
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "In this bot"
 msgstr ""
 
 #: src/pages/BillingSettingsPanel.tsx
@@ -3100,6 +3291,15 @@ msgstr "Intervalleinheit"
 msgid "Invalid code"
 msgstr "Ungültiger Code"
 
+#: src/components/InviteDialog.tsx
+#: src/components/SidebarFooter.tsx
+msgid "Invite friends"
+msgstr "Freunde einladen"
+
+#: src/components/InviteDialog.tsx
+msgid "Invite link"
+msgstr "Einladungslink"
+
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Isolated"
@@ -3164,6 +3364,10 @@ msgstr "Behalten"
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr ""
+
+#: src/components/LoginFields.tsx
+msgid "Label"
+msgstr "Bezeichnung"
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Language"
@@ -3261,6 +3465,10 @@ msgstr "Erinnerungseinstellungen werden geladen…"
 msgid "Loading model catalog…"
 msgstr "Modellkatalog wird geladen…"
 
+#: src/pages/PluginsOverlay.tsx
+msgid "Loading plugins…"
+msgstr ""
+
 #: src/components/ArtifactFileCard.tsx
 msgid "Loading preview…"
 msgstr "Vorschau wird geladen…"
@@ -3269,6 +3477,8 @@ msgstr "Vorschau wird geladen…"
 msgid "Loading voice providers…"
 msgstr "Stimmanbieter werden geladen…"
 
+#: src/components/integrations/plugin-marketplace.tsx
+#: src/components/integrations/skills-dialog.tsx
 #: src/components/PageLoading.tsx
 #: src/pages/Artifacts.tsx
 #: src/pages/IntegrationSetup.tsx
@@ -3364,6 +3574,10 @@ msgstr "Als ungelesen markieren"
 msgid "Markdown table"
 msgstr "Markdown-Tabelle"
 
+#: src/pages/PluginsOverlay.tsx
+msgid "Marketing"
+msgstr ""
+
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
 msgid "Max"
@@ -3393,8 +3607,11 @@ msgstr "Maximale Ausgabetokens"
 msgid "MCP endpoint"
 msgstr ""
 
-#: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
+msgid "MCP server"
+msgstr ""
+
+#: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/agent-import.tsx
 msgid "MCP servers"
 msgstr "MCP-Server"
@@ -3605,8 +3822,13 @@ msgstr ""
 msgid "Monthly credits expire at renewal. Top-ups do not expire."
 msgstr ""
 
+#: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/message-hover-actions.tsx
 msgid "More"
+msgstr ""
+
+#: src/pages/PluginsOverlay.tsx
+msgid "More apps"
 msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
@@ -3644,6 +3866,7 @@ msgstr "Stummgeschaltet"
 #: src/pages/GroupPanel.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/providers-section.tsx
+#: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3799,9 +4022,9 @@ msgstr ""
 msgid "No matching models"
 msgstr "Keine passenden Modelle"
 
-#: src/pages/PluginsOverlay.tsx
-msgid "No MCP or API tool sources installed yet."
-msgstr "Noch keine MCP- oder API-Toolquellen installiert."
+#: src/components/ApprovalRulePreview.tsx
+msgid "No matching rule"
+msgstr "Keine passende Regel"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "No MCP servers yet."
@@ -3868,6 +4091,11 @@ msgstr ""
 #: src/pages/shell/agent-import.tsx
 msgid "Not a valid skill"
 msgstr "Kein gültiger Skill"
+
+#. placeholder {0}: notAdded.map((entry) => entry.name).join(", ")
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "Not added: {0}"
+msgstr ""
 
 #: src/components/McpServerHealthLine.tsx
 msgid "Not checked yet"
@@ -3976,6 +4204,7 @@ msgid "One-time purchase. Credits do not expire."
 msgstr ""
 
 #: src/components/markdown-link-prompt.tsx
+#: src/pages/PaymentWalletSettingsPanel.tsx
 #: src/pages/shell/computer-panel.tsx
 #: src/pages/shell/import-setup-card.tsx
 #: src/pages/shell/message-view.tsx
@@ -4058,6 +4287,10 @@ msgstr "Oder einen API-Schlüssel einfügen"
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Organization API key"
 msgstr "Organisations-API-Schlüssel"
+
+#: src/pages/shell/avatar-studio-popover.tsx
+msgid "Original"
+msgstr ""
 
 #: src/pages/shell/chat-context.tsx
 msgid "Original message unavailable"
@@ -4214,6 +4447,15 @@ msgstr "Wiedergabe…"
 msgid "Plugin"
 msgstr "Plugin"
 
+#: src/components/integrations/skills-dialog.tsx
+#: src/pages/PluginsOverlay.tsx
+msgid "Plugin GitHub URL"
+msgstr ""
+
+#: src/components/integrations/skills-dialog.tsx
+msgid "Plugins"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Post \"No changes\" in chat"
 msgstr "„Keine Änderungen“ im Chat posten"
@@ -4225,6 +4467,13 @@ msgstr ""
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Preferences"
 msgstr "Präferenzen"
+
+#: src/components/ApprovalRulePreview.tsx
+#: src/components/ApprovalRulesSettings.tsx
+#: src/components/integrations/skills-dialog.tsx
+#: src/pages/PluginsOverlay.tsx
+msgid "Preview"
+msgstr ""
 
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
@@ -4255,6 +4504,10 @@ msgstr "Privat"
 msgid "Private workspace with its own bots and groups."
 msgstr ""
 
+#: src/pages/PluginsOverlay.tsx
+msgid "Productivity"
+msgstr ""
+
 #: src/pages/shell/import-status.ts
 msgid "Program: {name}"
 msgstr "Programm: {name}"
@@ -4280,6 +4533,10 @@ msgstr "Pull Request"
 #: src/pages/ActivityList.tsx
 msgid "Queued"
 msgstr "In Warteschlange"
+
+#: src/pages/shell/avatar-studio-popover.tsx
+msgid "Rakazo"
+msgstr "Rakazo"
 
 #: src/components/ModelCredits.tsx
 #: src/pages/Onboarding.tsx
@@ -4323,6 +4580,11 @@ msgstr ""
 msgid "Recent"
 msgstr "Kürzlich"
 
+#: src/pages/PluginsOverlay.tsx
+msgid "Recommended"
+msgstr ""
+
+#: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Reconnect"
 msgstr ""
@@ -4392,6 +4654,10 @@ msgstr "Einen nicht funktionierenden Computer neu erstellen."
 msgid "Recreating the computer"
 msgstr ""
 
+#: src/pages/PluginsOverlay.tsx
+msgid "Recruiting & HR"
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Redirect URI"
 msgstr "Weiterleitungs-URI"
@@ -4426,7 +4692,11 @@ msgstr "Kontrolle abgeben"
 msgid "Reload"
 msgstr "Neu laden"
 
+#: src/components/ApprovalRulePreview.tsx
 #: src/components/ApprovalRulesSettings.tsx
+#: src/components/integrations/plugin-marketplace.tsx
+#: src/components/LoginFields.tsx
+#: src/components/TrustedLinkSitesSettings.tsx
 #: src/components/VaultSettings.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelRoleSettings.tsx
@@ -4451,9 +4721,20 @@ msgstr ""
 msgid "Remove {secretName}? Bots will no longer be able to use it."
 msgstr "{secretName} entfernen? Bots können es dann nicht mehr verwenden."
 
+#: src/components/TrustedLinkSitesSettings.tsx
+msgid "Remove {site}"
+msgstr "{site} entfernen"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove change trigger"
 msgstr "Änderungsauslöser entfernen"
+
+#: src/components/integrations/plugin-marketplace.tsx
+#: src/pages/KnowledgeSection.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/PluginsOverlay.tsx
+msgid "Remove from every space?"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
@@ -4481,6 +4762,10 @@ msgstr ""
 msgid "Remove skill {0}"
 msgstr "Skill {0} entfernen"
 
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "Remove skills"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove webhook"
 msgstr ""
@@ -4493,6 +4778,7 @@ msgstr "Entfernt"
 msgid "Removed, but list refresh failed"
 msgstr "Entfernt, aber die Liste konnte nicht aktualisiert werden"
 
+#: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Removing…"
 msgstr "Wird entfernt…"
@@ -4621,6 +4907,8 @@ msgid "Restoring your workspace"
 msgstr ""
 
 #: src/components/AccountAccess.tsx
+#: src/components/integrations/plugin-marketplace.tsx
+#: src/components/integrations/skills-dialog.tsx
 #: src/components/PasskeySettings.tsx
 #: src/pages/Auth.tsx
 #: src/pages/ModelRoleSettings.tsx
@@ -4715,6 +5003,10 @@ msgstr "Ausführungen"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
+msgstr ""
+
+#: src/pages/PluginsOverlay.tsx
+msgid "Sales & CRM"
 msgstr ""
 
 #: src/lib/cron.ts
@@ -4849,6 +5141,10 @@ msgstr "Modelle suchen"
 msgid "Search runs"
 msgstr "Durchläufe suchen"
 
+#: src/components/integrations/skills-dialog.tsx
+msgid "Search skills"
+msgstr ""
+
 #. placeholder {0}: filters.query.trim()
 #: src/pages/ActivityList.tsx
 msgid "Search: {0}"
@@ -4862,6 +5158,10 @@ msgstr "Suche…"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Security"
 msgstr "Sicherheit"
+
+#: src/pages/PluginsOverlay.tsx
+msgid "Security & Ops"
+msgstr ""
 
 #: src/pages/shell/chat-header.tsx
 msgid "Select a bot"
@@ -4981,6 +5281,10 @@ msgstr "Geteilt"
 msgid "Shared memory"
 msgstr "Gemeinsame Erinnerungen"
 
+#: src/components/VaultSettings.tsx
+msgid "Show"
+msgstr "Anzeigen"
+
 #: src/pages/GroupPanel.tsx
 msgid "Show all"
 msgstr ""
@@ -5027,10 +5331,12 @@ msgstr "Transkript anzeigen"
 msgid "Sidebar density"
 msgstr ""
 
+#: src/components/integrations/plugin-marketplace.tsx
 #: src/lib/localized-provider-hint.ts
 #: src/pages/Auth.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/PluginsOverlay.tsx
 #: src/pages/Welcome.tsx
 msgid "Sign in"
 msgstr "Anmelden"
@@ -5070,6 +5376,10 @@ msgstr "Melde dich mit dem Abonnement an oder teste stattdessen den API-Schlüss
 msgid "Sign up"
 msgstr "Registrieren"
 
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "Sign-in cancelled. Try again."
+msgstr ""
+
 #: src/components/VaultSettings.tsx
 msgid "Site"
 msgstr ""
@@ -5083,7 +5393,9 @@ msgstr "Skill {0}"
 msgid "Skill {position}"
 msgstr "Skill {position}"
 
-#: src/pages/KnowledgeSection.tsx
+#: src/components/integrations/plugin-marketplace.tsx
+#: src/components/integrations/skills-dialog.tsx
+#: src/components/SidebarFooter.tsx
 #: src/pages/shell/agent-import.tsx
 msgid "Skills"
 msgstr "Skills"
@@ -5116,6 +5428,11 @@ msgstr ""
 #: src/components/composer/HoldToTalk.tsx
 msgid "Slide up to lock"
 msgstr "Zum Sperren nach oben schieben"
+
+#: src/components/integrations/skills-dialog.tsx
+#: src/pages/PluginsOverlay.tsx
+msgid "Some plugins could not be loaded."
+msgstr ""
 
 #: src/pages/shell/agent-import.tsx
 msgid "Some settings are not imported"
@@ -5362,6 +5679,10 @@ msgstr "API-Schlüssel testen"
 msgid "Test connection"
 msgstr "Verbindung testen"
 
+#: src/components/ApprovalRulePreview.tsx
+msgid "Test rule"
+msgstr "Regel testen"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Test run"
 msgstr ""
@@ -5486,6 +5807,11 @@ msgstr "dieser Computer"
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
+msgid "This connection's request limit is too small. Choose another model."
+msgstr "Das Anfragelimit dieser Verbindung ist zu niedrig. Wähle ein anderes Modell."
+
+#. js-lingui-explicit-id
+#: src/lib/run-error.ts
 msgid "This conversation is too long for the model. Retrying won't help. Start a new chat or shorten your message."
 msgstr "Diese Unterhaltung ist zu lang für das Modell. Ein erneuter Versuch hilft nicht. Starte einen neuen Chat oder kürze deine Nachricht."
 
@@ -5589,7 +5915,6 @@ msgid "Timing may differ"
 msgstr "Der Zeitplan kann abweichen"
 
 #: src/pages/Board.tsx
-#: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Titel"
 
@@ -5631,13 +5956,10 @@ msgstr "Toolargumente müssen ein JSON-Objekt sein"
 msgid "Tool arguments must be JSON"
 msgstr "Toolargumente müssen JSON sein"
 
+#: src/components/ApprovalRulePreview.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Tool name"
 msgstr "Toolname"
-
-#: src/pages/PluginsOverlay.tsx
-msgid "Tool sources"
-msgstr "Toolquellen"
 
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -5671,6 +5993,10 @@ msgstr ""
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Trial ends {day}"
 msgstr ""
+
+#: src/components/TrustedLinkSitesSettings.tsx
+msgid "Trusted sites"
+msgstr "Vertrauenswürdige Websites"
 
 #: src/pages/ActivityList.tsx
 #: src/pages/Onboarding.tsx
@@ -5844,6 +6170,10 @@ msgstr "Standards verwenden"
 msgid "Use defaults for {label}"
 msgstr "Standards für {label} verwenden"
 
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "Use in this bot"
+msgstr ""
+
 #: src/components/ModelCredits.tsx
 msgid "Use my subscription or API key"
 msgstr ""
@@ -5893,6 +6223,7 @@ msgstr ""
 msgid "Using your API key. Free plan ends {freeUntil}."
 msgstr "Dein API-Schlüssel wird verwendet. Kostenloser Tarif endet am {freeUntil}."
 
+#: src/components/LoginFields.tsx
 #: src/components/VaultSettings.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Value"
@@ -5915,6 +6246,14 @@ msgstr "Wird geprüft…"
 msgid "Version"
 msgstr ""
 
+#: src/pages/PluginsOverlay.tsx
+msgid "View all"
+msgstr ""
+
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "View source"
+msgstr ""
+
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/SpaceSettingOverrides.tsx
@@ -5933,6 +6272,10 @@ msgstr "Wartet in der Warteschlange…"
 #: src/pages/shell/message-cards.tsx
 msgid "Waiting…"
 msgstr "Warten…"
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Wallet"
+msgstr ""
 
 #: src/components/ModelCredits.tsx
 msgid "Web, desktop and mobile"
@@ -5975,6 +6318,10 @@ msgstr ""
 #: src/pages/shell/dialogs.tsx
 msgid "What about its memories?"
 msgstr "Was soll mit seinen Erinnerungen geschehen?"
+
+#: src/pages/shell/dialogs.tsx
+msgid "What can this space use?"
+msgstr ""
 
 #: src/components/SignupSurvey.tsx
 msgid "What do you most want Rakazo to help with?"
@@ -6135,6 +6482,10 @@ msgstr "Dein OpenAI"
 #: src/lib/run-error.ts
 msgid "Your OpenRouter"
 msgstr "Dein OpenRouter"
+
+#: src/components/integrations/skills-dialog.tsx
+msgid "Your skills"
+msgstr ""
 
 #: src/components/ModelCredits.tsx
 msgid "Your subscription or API key"

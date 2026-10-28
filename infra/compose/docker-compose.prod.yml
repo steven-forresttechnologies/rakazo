@@ -100,7 +100,6 @@ x-app-environment: &app-environment
   RAKAZO_OPENAI_COMPATIBLE_VISION_MODELS:
   RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC:
   RAKAZO_OPENAI_COMPAT_PRIVATE_HOSTS:
-  RAKAZO_AUTO_REVIEW:
   RAKAZO_AUTO_REVIEW_PROVIDER:
   RAKAZO_AUTO_REVIEW_MODEL:
   RAKAZO_AUTO_REVIEW_MIN_CONFIDENCE:
@@ -201,6 +200,8 @@ x-app-environment: &app-environment
   CREATEOS_SANDBOX_SHAPE:
   CLOUD_AGENT_PROVIDER: ${CLOUD_AGENT_PROVIDER:-none}
   CLOUD_AGENT_SPACE_ID: ${CLOUD_AGENT_SPACE_ID:-}
+  PAYMENT_WALLET_PROVIDER: ${PAYMENT_WALLET_PROVIDER:-none}
+  PAYMENT_WALLET_CLIENT_ID: ${PAYMENT_WALLET_CLIENT_ID:-}
   CURSOR_API_KEY: ${CURSOR_API_KEY:-}
   # Tools and integrations
   WEB_PROVIDER:
@@ -286,6 +287,66 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  # Optional point-in-time recovery (docs/self-host.md#point-in-time-recovery). Postgres keeps no
+  # egress: this sidecar streams WAL from it over `data` with a replication-only login and uploads
+  # encrypted copies over its own `backup` network. infra/compose/pitr.sh enable turns it on.
+  pitr:
+    profiles: [pitr]
+    # Tagged with a hash of Dockerfile.pitr and pitr-agent.sh, so a deploy builds it once per change
+    # instead of on every run (compose-service.test.ts checks the hash).
+    image: rakazo-pitr:946023c9df8ee532
+    build:
+      context: .
+      dockerfile: Dockerfile.pitr
+      args:
+        POSTGRES_IMAGE: ${POSTGRES_IMAGE:-postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6}
+    restart: unless-stopped
+    init: true
+    logging: *logging
+    user: postgres
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 64
+    mem_limit: 512m
+    # Base backups compress on one core at most, leaving the rest to the app and database.
+    cpus: 1
+    environment:
+      # Stops pg_receivewal and uploads with the container, not only the script.
+      TINI_KILL_PROCESS_GROUP: "1"
+      PGHOST: postgres
+      PGUSER: rakazo_pitr
+      PGDATABASE: postgres
+      PGPASSWORD: ${PITR_DATABASE_PASSWORD:-}
+      PITR_AGE_RECIPIENTS:
+      PITR_BUCKET:
+      PITR_ENDPOINT:
+      PITR_REGION:
+      PITR_ACCESS_KEY_ID:
+      PITR_SECRET_ACCESS_KEY:
+      PITR_PREFIX:
+      PITR_PATH_STYLE:
+      PITR_RETAIN_DAYS:
+      PITR_MAX_WAL_GB:
+    volumes:
+      - pitrspool:/var/lib/rakazo-pitr
+    tmpfs:
+      - /tmp
+    networks:
+      - data
+      - backup
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "rakazo-pitr", "health"]
+      interval: 1m
+      timeout: 20s
+      retries: 3
+      start_period: 2m
 
   # Applies migrations as the database owner, creates the runtime login, and exits. Only this
   # container gets the owner login: the API and worker connect as rakazo_app, which row-level
@@ -374,6 +435,8 @@ services:
       EMAIL_API_KEY:
       SMTP_URL:
       EMAIL_FROM:
+      EMAIL_REPLY_TO:
+      WELCOME_EMAIL_ENABLED:
       STRIPE_SECRET_KEY:
       STRIPE_WEBHOOK_SECRET:
       STRIPE_PRICE_ID:
@@ -476,6 +539,9 @@ services:
     mem_limit: 512m
     environment:
       NODE_ENV: production
+      # vite preview bundles its config with Rolldown, which starts one thread per host CPU.
+      # Keep that fixed so pids_limit holds on many-core hosts (#2430).
+      RAYON_NUM_THREADS: "4"
       API_PROXY_TARGET: http://api:3100
       RAKAZO_HOST: ${RAKAZO_HOST:-app.example.com}
       SCREEN_PROXY_SECRET: ${SCREEN_PROXY_SECRET:?Set SCREEN_PROXY_SECRET in .env}
@@ -609,6 +675,7 @@ volumes:
   caddydata:
   caddyconfig:
   webassets:
+  pitrspool:
 
 networks:
   edge:
@@ -616,3 +683,4 @@ networks:
   control:
   data:
     internal: true
+  backup:

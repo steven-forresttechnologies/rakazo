@@ -68,6 +68,7 @@ function fixture({
   rules = [] as ActionApprovalRule[],
   confirmationsOverride = false,
   autoReview = false,
+  savedPreference = true,
   approvalRole,
   nativeReview = false,
   checkerConnected = true,
@@ -77,7 +78,6 @@ function fixture({
   prompt = "Read the item",
   bot = {
     name: "Assistant",
-    title: "Assistant",
     description: "Test assistant",
   },
   shutdownSignal,
@@ -97,13 +97,10 @@ function fixture({
   userDevices,
   botUserId = "user-1",
 }: {
-  /** The run starter's desktop connection. */
   userDevices?: UserDeviceGateway;
   /** The bot's owner; runs are started by user-1. */
   botUserId?: string;
-  /** Apps connected through Composio. */
   connectedApps?: string[];
-  /** The bot's routines, as the owner wrote them. */
   routines?: { name: string; prompt: string }[];
   /** Adds `demo_get_other`, a read on a separate installed resource with the same name prefix. */
   secondResource?: boolean;
@@ -127,6 +124,7 @@ function fixture({
   /** The Space has its own confirmations; otherwise `rules` and auto review are the account's. */
   confirmationsOverride?: boolean;
   autoReview?: boolean;
+  savedPreference?: boolean;
   approvalRole?: ModelRoleSettings;
   nativeReview?: boolean;
   checkerConnected?: boolean;
@@ -134,7 +132,7 @@ function fixture({
   trigger?: string;
   secrets?: string[];
   prompt?: string;
-  bot?: { name: string; title: string; description: string };
+  bot?: { name: string; description: string };
   shutdownSignal?: AbortSignal;
 } = {}) {
   let taskPrompt = prompt;
@@ -260,16 +258,20 @@ function fixture({
         id: run.botId,
         userId: botUserId,
         name: bot.name,
-        title: bot.title,
         description: bot.description,
         disabledBuiltinTools,
         fleetManagement,
         computerId: "computer-1",
         computer: { id: "computer-1", scope: "dedicated" },
       })),
-      update: vi.fn(async ({ data }: { data: Record<string, unknown> }) =>
-        Object.assign(instructionState, data),
-      ),
+      update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: run.botId,
+        name: bot.name,
+        description: bot.description,
+        color: "#8B5CF6",
+        notifyOnFinish: true,
+        ...Object.assign(instructionState, data),
+      })),
       updateMany: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         Object.assign(instructionState, data);
         return { count: 1 };
@@ -298,7 +300,9 @@ function fixture({
       update: vi.fn(async () => ({ nextMessageSeq: 2, nextEventSeq: 2 })),
     },
     message: {
-      findFirst: vi.fn(async () => null),
+      findFirst: vi.fn(
+        async (_query?: { where?: { OR?: unknown } }): Promise<{ id: string } | null> => null,
+      ),
       findUnique: vi.fn(async () =>
         sourceRole ? { role: sourceRole, blocks: [{ kind: "text", text: prompt }] } : null,
       ),
@@ -366,7 +370,6 @@ function fixture({
     taughtSkill: { findMany: vi.fn(async () => []) },
     chatGroup: { findMany: vi.fn(async () => []) },
     botSection: { findMany: vi.fn(async () => []) },
-    agentSecret: { findMany: vi.fn(async () => []) },
     vaultCredential: { findMany: vi.fn(async () => []) },
     agentSkill: { findMany: vi.fn(async () => []) },
     scratchpadItem: { findMany: vi.fn(async () => []) },
@@ -383,12 +386,12 @@ function fixture({
     routine: { findMany: vi.fn(async () => routines) },
     actionAutoReviewPreference: {
       findUnique: vi.fn(async () =>
-        confirmationsOverride ? { enabled: autoReview, skipApprovals } : null,
+        confirmationsOverride && savedPreference ? { enabled: autoReview, skipApprovals } : null,
       ),
     },
     userActionAutoReviewPreference: {
       findUnique: vi.fn(async () =>
-        confirmationsOverride ? null : { enabled: autoReview, skipApprovals },
+        confirmationsOverride || !savedPreference ? null : { enabled: autoReview, skipApprovals },
       ),
     },
     steeringMessage: {
@@ -1042,6 +1045,15 @@ describe("connector read-only metadata and approval enforcement", () => {
       },
     );
 
+    it("reviews automatically when no approval mode was ever saved", async () => {
+      reviewMock.mockResolvedValue({ decision: "pass", model: "scripted/checker" });
+      const f = fixture({ catalog, name: "demo_send_message", savedPreference: false });
+      await f.run();
+      expect(reviewMock).toHaveBeenCalledOnce();
+      expect(f.execute).toHaveBeenCalledOnce();
+      expect(f.pauseRunForInput).not.toHaveBeenCalled();
+    });
+
     it("redacts run secrets from automatic review task and bot context", async () => {
       reviewMock.mockResolvedValue({ decision: "pass", model: "mock" });
       const f = fixture({
@@ -1052,7 +1064,6 @@ describe("connector read-only metadata and approval enforcement", () => {
         prompt: "Send mail with super-secret-token",
         bot: {
           name: "Mail",
-          title: "Helper",
           description: "Uses super-secret-token",
         },
       });
@@ -1060,7 +1071,7 @@ describe("connector read-only metadata and approval enforcement", () => {
       expect(reviewMock).toHaveBeenCalledWith(
         expect.objectContaining({
           userTask: "Send mail with [redacted]",
-          botDescription: "Mail: Helper\nUses [redacted]",
+          botDescription: "Mail\nUses [redacted]",
         }),
         expect.objectContaining({ runId: "run-1" }),
       );
@@ -1197,6 +1208,101 @@ describe("create_space", () => {
     await skipped.run(true);
     expect(skipped.pauseRunForInput).not.toHaveBeenCalled();
     expect(skipped.effects[0]?.status).not.toBe("intended");
+  });
+});
+
+describe("first instructions through update_bot", () => {
+  const first = "Draft only. Ask before sending.";
+  function emptyBot(options: Parameters<typeof fixture>[0] = {}) {
+    const f = fixture({ name: "update_bot", builtin: true, ...options });
+    f.instructionState.instructions = "";
+    f.setCalls([{ args: { instructions: first }, executionId: "call-1" }]);
+    return f;
+  }
+  it.each(["user", "created"])(
+    "sets a bot's first instructions without a card in a %s run",
+    async (trigger) => {
+      const f = emptyBot({ trigger });
+      await f.run();
+      expect(f.pauseRunForInput).not.toHaveBeenCalled();
+      expect(f.results).toEqual([{ ok: true }]);
+      expect(f.instructionState.instructions).toBe(first);
+      expect(f.instructionState.instructionHistory).toHaveLength(1);
+    },
+  );
+  it("sets them on a later attempt, as when the owner answers the intro question", async () => {
+    const f = emptyBot();
+    f.prisma.attempt.count.mockResolvedValue(2);
+    await f.run();
+    expect(f.results).toEqual([{ ok: true }]);
+    expect(f.instructionState.instructions).toBe(first);
+  });
+  it("sets them after a profile edit earlier in the run", async () => {
+    const f = emptyBot();
+    f.setCalls([
+      { args: { description: "Drafts replies" }, executionId: "call-1" },
+      { args: { instructions: first }, executionId: "call-2" },
+    ]);
+    await f.run();
+    expect(f.results.at(-1)).toEqual({ ok: true });
+    expect(f.instructionState.instructions).toBe(first);
+  });
+  it("leaves instructions unset when another field in the same call is rejected", async () => {
+    const f = emptyBot();
+    f.setCalls([{ args: { name: "N".repeat(200), instructions: first }, executionId: "call-1" }]);
+    await f.run();
+    expect(f.results[0]).toMatchObject({ error: expect.stringContaining("name") });
+    expect(f.instructionState.instructions).toBe("");
+  });
+  it("refuses when the chat already holds outside messages", async () => {
+    const f = emptyBot();
+    f.prisma.message.findFirst.mockImplementation(async (query?: { where?: { OR?: unknown } }) =>
+      query?.where?.OR ? { id: "channel-message" } : null,
+    );
+    await f.run();
+    expect(f.results).toEqual([
+      { error: "Propose your instructions with propose_instructions_update." },
+    ]);
+    expect(f.instructionState.instructions).toBe("");
+  });
+  it("refuses when an outside run already wrote in the chat", async () => {
+    const f = emptyBot();
+    f.prisma.run.findFirst.mockImplementation(
+      async (query?: { where?: { trigger?: { in?: string[] } } }) =>
+        query?.where?.trigger?.in?.includes("webhook") ? { id: "webhook-run" } : null,
+    );
+    await f.run();
+    expect(f.instructionState.instructions).toBe("");
+  });
+  it("leaves instructions that already exist to a proposal", async () => {
+    const f = emptyBot();
+    f.instructionState.instructions = "Draft only";
+    await f.run();
+    expect(f.results).toEqual([
+      { error: "You already have instructions; change them with propose_instructions_update." },
+    ]);
+    expect(f.instructionState.instructions).toBe("Draft only");
+  });
+  it.each(["user", "created"])("refuses once outside content entered a %s run", async (trigger) => {
+    const f = emptyBot({ trigger });
+    f.claimedOutsideSteering(true);
+    await f.run();
+    expect(f.results).toEqual([
+      { error: "Propose your instructions with propose_instructions_update." },
+    ]);
+    expect(f.instructionState.instructions).toBe("");
+  });
+  it("refuses in a run the owner did not start", async () => {
+    const f = emptyBot({ trigger: "webhook" });
+    await f.run();
+    expect(f.instructionState.instructions).toBe("");
+  });
+  it("refuses known credentials", async () => {
+    const f = emptyBot({ secrets: ["fake-credential-value"] });
+    f.setCalls([{ args: { instructions: "Use fake-credential-value" }, executionId: "call-1" }]);
+    await f.run();
+    expect(f.results).toEqual([{ error: "Instructions cannot contain credentials." }]);
+    expect(f.instructionState.instructions).toBe("");
   });
 });
 
@@ -1980,7 +2086,7 @@ describe("Auto Review of new sites", () => {
       connectorKind: expect.any(String),
       args: { url: "https://attacker.test/?q=x" },
       userTask: "Read https://docs.example.com/guide",
-      botDescription: "Assistant: Assistant\nTest assistant",
+      botDescription: "Assistant\nTest assistant",
       matchingRules: [],
       newSite: true,
     });
@@ -2486,7 +2592,11 @@ describe("user_computer_shell", () => {
     });
     f.setCalls([call("ls")]);
     await f.run();
-    expect(f.results[0]).toEqual({ error: expect.stringContaining("is blocked in this space") });
+    expect(f.results[0]).toEqual({
+      error: expect.stringContaining(
+        'is blocked in this space by the saved rule "User computer shell".',
+      ),
+    });
     expect(f.pauseRunForInput).not.toHaveBeenCalled();
   });
 

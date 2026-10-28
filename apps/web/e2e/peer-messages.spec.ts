@@ -12,7 +12,6 @@ test("shows peer chips in transcript and opens view-only peer chat", async ({ pa
   const chiefId = activeBotId(page);
   await rpc(page, "bots/create", {
     name: "Researcher",
-    title: "",
     description: "",
     instructions: "",
     notifyOnFinish: true,
@@ -62,18 +61,19 @@ test("shows peer chips in transcript and opens view-only peer chat", async ({ pa
     timeout: 60_000,
   });
   await expect(transcript.getByText("peer-exchange-alpha")).toHaveCount(2);
-  const assertChipLeftAligned = async () => {
+  const assertChipCentered = async () => {
     const transcriptBox = await transcript.boundingBox();
     const chipBox = await chip.boundingBox();
     expect(transcriptBox).not.toBeNull();
     expect(chipBox).not.toBeNull();
-    // Transcript padding is 16px mobile / 28px desktop; centering must fail this assertion.
-    expect(chipBox!.x - transcriptBox!.x).toBeLessThanOrEqual(32);
+    const chipCenter = chipBox!.x + chipBox!.width / 2;
+    const transcriptCenter = transcriptBox!.x + transcriptBox!.width / 2;
+    expect(Math.abs(chipCenter - transcriptCenter)).toBeLessThanOrEqual(8);
     // Stay under 75% of the transcript width so the chip cannot become a full-width bar.
     expect(chipBox!.width).toBeLessThan(transcriptBox!.width * 0.75);
   };
 
-  await assertChipLeftAligned();
+  await assertChipCentered();
   await expect(composer).toBeVisible();
   await captureScreenshot(page, testInfo, "peer-chip-desktop");
 
@@ -81,7 +81,7 @@ test("shows peer chips in transcript and opens view-only peer chat", async ({ pa
   await chip.scrollIntoViewIfNeeded();
   await expect(chip).toBeVisible();
   await expect(composer).toBeVisible();
-  await assertChipLeftAligned();
+  await assertChipCentered();
   await captureScreenshot(page, testInfo, "peer-chip-mobile");
 
   await chip.focus();
@@ -127,7 +127,6 @@ async function openFoldedPeerReply(page: Page, name: string, testInfo: TestInfo)
 
   const researcher = await rpc<{ id: string }>(page, "bots/create", {
     name: "Researcher",
-    title: "",
     description: "",
     instructions: "",
     notifyOnFinish: true,
@@ -230,7 +229,6 @@ test("folds a peer run's reply under its marker and keeps its ask inline", async
     .getAttribute("data-message-id");
   const replyRow = transcript.locator(`[data-message-id="${replyId}"]`);
 
-  // A reaction stays with its folded reply.
   await replyRow.hover();
   await replyRow.getByRole("button", { name: "React" }).click();
   await page.getByRole("button", { name: "👍", exact: true }).click();
@@ -247,7 +245,6 @@ test("folds a peer run's reply under its marker and keeps its ask inline", async
   await expect(reactions).toBeInViewport();
   await captureScreenshot(page, testInfo, "peer-reply-reaction-expanded");
 
-  // A reply quote opens its folded parent.
   await replyRow.hover();
   await replyRow.getByRole("button", { name: "Reply", exact: true }).click();
   await composer.fill("peer-fold-quote");
@@ -303,7 +300,6 @@ test("answers a message sent while the bot works on another bot's request", asyn
   await page.waitForURL(/\/app\/[^/]+$/);
   const researcher = await rpc<{ id: string }>(page, "bots/create", {
     name: "Researcher",
-    title: "",
     description: "",
     instructions: "",
     notifyOnFinish: true,

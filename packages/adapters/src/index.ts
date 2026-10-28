@@ -19,6 +19,7 @@ export {
   normalizeSecretDestination,
   pageUrlOrigin,
   revealBotSecret,
+  SPACE_VAULT_NOT_IN_USE,
   storeBotSecret,
 } from "./bot-secrets.js";
 export * from "./browser-emulator.js";
@@ -118,6 +119,8 @@ export * from "./openai-voice.js";
 export * from "./openrouter-usage.js";
 export * from "./page-browser-session.js";
 export * from "./parallel-web.js";
+export * from "./payment-wallet-factory.js";
+export * from "./payment-wallets.js";
 export * from "./pi-catalog-availability.js";
 export * from "./pi-codex-catalog.js";
 export * from "./pi-credentials.js";
@@ -130,7 +133,11 @@ export * from "./pi-runtime.js";
 export * from "./pi-session.js";
 export { shutdownPiTelemetry } from "./pi-telemetry.js";
 export * from "./pipedream-connector.js";
+export * from "./plugin-connectors.js";
+export * from "./plugin-marketplace.js";
 export * from "./product-analytics.js";
+export * from "./purchase-poll.js";
+export * from "./purchase-service.js";
 export * from "./push-token-store.js";
 export * from "./railway-sandbox.js";
 export * from "./realtime.js";

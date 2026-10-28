@@ -8,8 +8,8 @@ import {
 } from "@rakazo/core";
 import { sitesInText, urlSite } from "@rakazo/core/egress";
 import { findAutoReviewPreference, listApprovalRules } from "@rakazo/db";
+import { SITE_SENDING_TOOLS } from "./approval-ask.js";
 import { boundDirectApprovalDetails, catalogApprovalDetails } from "./approval-effect.js";
-import { deploymentAutoReviewDefault } from "./auto-review.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import type { EffectiveModelRole } from "./model-roles.js";
 import { effectiveModelRole } from "./model-roles.js";
@@ -102,7 +102,7 @@ export function createRunTrustLoaders(
       userId: run.userId,
       spaceId: run.spaceId,
     }).then((row) => ({
-      enabled: row?.enabled ?? deploymentAutoReviewDefault(),
+      enabled: row?.enabled ?? true,
       skipApprovals: row?.skipApprovals ?? false,
     }));
     return autoReviewPreferencePromise;
@@ -135,7 +135,11 @@ export function createRunTrustLoaders(
   const loadTrustedSites = () => {
     trustedSitesPromise ??= deps.prisma.externalEffect
       .findMany({
-        where: { runId, kind: "web_fetch", status: { in: PASSED_EFFECT_STATUSES } },
+        where: {
+          runId,
+          kind: { in: [...SITE_SENDING_TOOLS] },
+          status: { in: PASSED_EFFECT_STATUSES },
+        },
         select: { request: true },
       })
       .then(async (rows) => {

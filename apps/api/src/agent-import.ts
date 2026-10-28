@@ -20,6 +20,7 @@ import type {
   AgentImportSource,
   AgentImportWarning,
   Bot,
+  BotAvatarSet,
   CreateRoutineInput as CreateRoutineInputType,
   McpServerConfigInput,
   MessageBlock,
@@ -44,6 +45,7 @@ import {
 import type { McpServer as McpServerRow, Prisma, PrismaClient, Routine } from "@rakazo/db";
 import {
   appendEventInTransaction,
+  availableInSpace,
   createThreadMessageInTransaction,
   InstructionConflictError,
   IsolationError,
@@ -64,10 +66,11 @@ export type AgentImportServices<PreparedKey = unknown> = {
     actor: Actor,
     input: {
       name: string;
-      title: string;
       description: string;
       instructions: string;
       notifyOnFinish: boolean;
+      color?: string;
+      avatarSet?: BotAvatarSet;
       computerMode: AgentImportCreateInput["computerMode"];
       modelProvider: string | null;
       modelId: string | null;
@@ -179,8 +182,15 @@ async function takenNames(db: Reader, actor: Actor) {
     where: { ...owner, scope: "user", botId: null },
     select: { path: true },
   });
-  const skills = await db.agentSkill.findMany({ where: owner, select: { name: true } });
-  const servers = await db.mcpServer.findMany({ where: owner, select: { slug: true } });
+  // Names already taken here include the owner's items from other spaces that reach this one.
+  const skills = await db.agentSkill.findMany({
+    where: availableInSpace(actor),
+    select: { name: true },
+  });
+  const servers = await db.mcpServer.findMany({
+    where: availableInSpace(actor),
+    select: { slug: true },
+  });
   return {
     spaceMemoryPaths: documents.map((document) => document.path),
     skillNames: [...skills, ...BUILTIN_AGENT_SKILLS].map((skill) => skill.name),
@@ -609,7 +619,7 @@ export async function createImportedBot<PreparedKey>(
       select: { id: true },
     });
     const slugs = new Set(
-      (await tx.mcpServer.findMany({ where: owner, select: { slug: true } })).map(
+      (await tx.mcpServer.findMany({ where: availableInSpace(actor), select: { slug: true } })).map(
         (row) => row.slug,
       ),
     );
@@ -738,10 +748,11 @@ export async function createImportedBot<PreparedKey>(
     } else {
       bot = await services.createBot(actor, {
         name: input.name!,
-        title: "",
         description: input.description,
         instructions,
         notifyOnFinish: true,
+        color: input.color,
+        avatarSet: input.avatarSet ?? "organic",
         computerMode: input.computerMode,
         modelProvider: model?.provider ?? null,
         modelId: model?.modelId ?? null,

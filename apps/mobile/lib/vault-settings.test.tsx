@@ -17,7 +17,11 @@ type Credential = {
 const state = vi.hoisted(() => ({
   rpc: vi.fn(),
   alert: vi.fn(),
+  copy: vi.fn(async () => true),
+  actionSheet: vi.fn(),
+  confirmIdentity: vi.fn(async () => true),
   spaceId: undefined as string | undefined,
+  focused: true,
   credentials: [] as Credential[],
 }));
 const { element } = vi.hoisted(() => ({
@@ -45,7 +49,9 @@ vi.mock("./api", () => ({
   captureApiRequestContext: async (spaceId: string) => ({ headers: { space: spaceId } }),
 }));
 vi.mock("expo-router", () => ({
-  useFocusEffect: (effect: () => undefined | (() => void)) => useEffect(effect, [effect]),
+  // Focus effects run while `state.focused` holds and clean up once a render clears it.
+  useFocusEffect: (effect: () => undefined | (() => void)) =>
+    useEffect(() => (state.focused ? effect() : undefined), [effect, state.focused]),
   useLocalSearchParams: () => ({ spaceId: state.spaceId }),
 }));
 vi.mock("react-native", () => ({
@@ -56,6 +62,19 @@ vi.mock("react-native", () => ({
   View: element("div"),
 }));
 vi.mock("react-native-safe-area-context", () => ({ SafeAreaView: element("div") }));
+vi.mock("expo-clipboard", () => ({ setStringAsync: state.copy }));
+vi.mock("./message-action-sheet", () => ({ presentMessageActionSheet: state.actionSheet }));
+// The real retry rule from contracts, with the device prompt replaced by `confirmIdentity`.
+vi.mock("../components/confirm-identity", async () => {
+  const { runWithIdentityConfirmation } = await import("@rakazo/contracts");
+  return {
+    useIdentityConfirmation: () => ({
+      withIdentityConfirmation: <T,>(action: () => Promise<T>) =>
+        runWithIdentityConfirmation(action, state.confirmIdentity),
+      identityDialog: null,
+    }),
+  };
+});
 vi.mock("@expo/ui/community/menu", () => ({
   MenuView: ({
     actions,
@@ -166,7 +185,11 @@ async function render() {
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   state.spaceId = undefined;
+  state.focused = true;
   state.alert.mockReset();
+  state.actionSheet.mockReset();
+  state.copy.mockClear();
+  state.confirmIdentity.mockReset().mockResolvedValue(true);
   state.credentials = [
     credential({}),
     credential({ name: "netbird-key", origin: "", auth: { type: "command" } }),
@@ -178,6 +201,17 @@ beforeEach(() => {
       return credential({ ...destination, origin: destination.origin ?? "" });
     }
     if (proc === "vault/remove") return { ok: true };
+    if (proc === "vault/reveal") {
+      return input.name === "example-login"
+        ? {
+            fields: [
+              { label: "Email", value: "ada@example.test", hidden: false },
+              { label: "Password", value: "example-password", hidden: true },
+              { label: "PIN", value: "1234", hidden: true },
+            ],
+          }
+        : { value: "example-value" };
+    }
     throw new Error(`Unexpected RPC: ${proc}`);
   });
   container = document.createElement("div");
@@ -278,6 +312,7 @@ it("offers only removal for a credential whose settings can't be read", async ()
   state.credentials = [credential({ name: "legacy", auth: null })];
   await render();
   expect(button("Replace value", menu("legacy"))).toBeUndefined();
+  expect(button("Show", menu("legacy"))).toBeUndefined();
   expect(button("Remove", menu("legacy"))).toBeDefined();
 });
 
@@ -309,4 +344,111 @@ it("clears a failed removal's error once a later save succeeds", async () => {
   await act(async () => button("Add credential")!.click());
   await act(async () => button("Save", container.querySelector("dialog")!)!.click());
   expect(container.textContent).not.toContain("Could not remove the credential");
+});
+
+const identityRequired = () =>
+  Object.assign(new Error("Confirm it's you"), { code: "IDENTITY_CONFIRMATION_REQUIRED" });
+
+it("shows a value in a native alert with a copy action, and never on the screen", async () => {
+  await render();
+  await act(async () => button("Show", menu("netbird-key"))!.click());
+  expect(state.rpc).toHaveBeenCalledWith("vault/reveal", { scope: "account", name: "netbird-key" });
+  expect(state.alert).toHaveBeenCalledWith("netbird-key", "example-value", expect.any(Array));
+  expect(container.textContent).not.toContain("example-value");
+
+  await act(async () => alertButton("Copy").onPress?.());
+  expect(state.copy).toHaveBeenCalledWith("example-value");
+  expect(alertButton("Done").style).toBe("cancel");
+});
+
+it("shows each field of a website login under its label, each with its own copy", async () => {
+  state.credentials = [
+    credential({
+      name: "example-login",
+      origin: "https://login.example.test",
+      auth: { type: "login" },
+    }),
+  ];
+  await render();
+  await act(async () => button("Show", menu("example-login"))!.click());
+  expect(state.alert).toHaveBeenCalledWith(
+    "example-login",
+    "Email\nada@example.test\n\nPassword\nexample-password\n\nPIN\n1234",
+    expect.any(Array),
+  );
+  expect(alertButton("Done").style).toBe("cancel");
+  // Every field's copy goes in a sheet, which pages on Android instead of dropping buttons.
+  await act(async () => alertButton("Copy").onPress?.());
+  const sheet = state.actionSheet.mock.calls[0]![0] as {
+    title: string;
+    actions: { text: string; onPress: () => void }[];
+  };
+  expect(sheet.title).toBe("example-login");
+  expect(sheet.actions.map((action) => action.text)).toEqual([
+    "Copy Email",
+    "Copy Password",
+    "Copy PIN",
+  ]);
+  for (const action of sheet.actions) await act(async () => action.onPress());
+  expect(state.copy.mock.calls).toEqual([["ada@example.test"], ["example-password"], ["1234"]]);
+});
+
+it("reveals a Space's own vault through that Space", async () => {
+  state.spaceId = "space-work";
+  await render();
+  await act(async () => button("Show", menu("github"))!.click());
+  expect(state.rpc).toHaveBeenCalledWith(
+    "vault/reveal",
+    { scope: "space", name: "github" },
+    { requestContext: { headers: { space: "space-work" } } },
+  );
+});
+
+it("confirms it's the person and retries once when the server asks", async () => {
+  await render();
+  state.rpc.mockRejectedValueOnce(identityRequired());
+  await act(async () => button("Show", menu("github"))!.click());
+  expect(state.confirmIdentity).toHaveBeenCalledTimes(1);
+  expect(state.rpc.mock.calls.filter(([proc]) => proc === "vault/reveal")).toHaveLength(2);
+  expect(state.alert).toHaveBeenCalledWith("github", "example-value", expect.any(Array));
+});
+
+it("shows nothing and no error when the confirmation is dismissed", async () => {
+  await render();
+  state.confirmIdentity.mockResolvedValue(false);
+  state.rpc.mockRejectedValueOnce(identityRequired());
+  await act(async () => button("Show", menu("github"))!.click());
+  expect(state.rpc.mock.calls.filter(([proc]) => proc === "vault/reveal")).toHaveLength(1);
+  expect(state.alert).not.toHaveBeenCalled();
+  expect(container.textContent).not.toContain("Could not show the credential");
+});
+
+it("shows an error when revealing fails", async () => {
+  await render();
+  state.rpc.mockRejectedValueOnce(new Error("offline"));
+  await act(async () => button("Show", menu("github"))!.click());
+  expect(state.alert).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("Could not show the credential");
+});
+
+it("drops a value that arrives once another screen covers this one", async () => {
+  await render();
+  let finish!: (value: { value: string }) => void;
+  state.rpc.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await act(async () => button("Show", menu("github"))!.click());
+  state.focused = false;
+  await render();
+  await act(async () => finish({ value: "example-value" }));
+  expect(state.alert).not.toHaveBeenCalled();
+
+  // Back in focus, Show works again.
+  state.focused = true;
+  await render();
+  await act(async () => button("Show", menu("github"))!.click());
+  expect(state.alert).toHaveBeenCalledWith("github", "example-value", expect.any(Array));
 });

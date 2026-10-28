@@ -38,6 +38,7 @@ import {
 } from "./computer-workspace.js";
 import { removeAgentHome, removeAgentHomeFolders } from "./home.js";
 import { removePiBotSessions } from "./pi-session.js";
+import { isSandboxGoneError } from "./sandbox-errors.js";
 
 export function confirmSpawnedBotName(confirmName: string, botName: string) {
   if (confirmName !== botName) {
@@ -64,7 +65,6 @@ export async function spawnBot(
     runId: string;
     spawnKey: string;
     name: string;
-    title?: string;
     description?: string;
     instructions?: string;
     prompt?: string;
@@ -81,11 +81,10 @@ export async function spawnBot(
     isDeploymentOwner: false,
   };
   let duplicate = false;
-  let created: Pick<Bot, "id" | "name" | "title" | "threadId">;
+  let created: Pick<Bot, "id" | "name" | "threadId">;
   try {
     created = await createRepos(deps.prisma).createBot(actor, {
       name,
-      title: (input.title ?? "").trim(),
       description: (input.description ?? "").trim().slice(0, BOT_DESCRIPTION_MAX_LENGTH),
       instructions: (input.instructions ?? "").trim().slice(0, BOT_INSTRUCTIONS_MAX_LENGTH),
       notifyOnFinish: true,
@@ -115,7 +114,6 @@ export async function spawnBot(
     created = {
       id: existing.id,
       name: existing.name,
-      title: existing.title,
       threadId: existing.thread.id,
     };
   }
@@ -141,7 +139,6 @@ export async function spawnBot(
     ...(duplicate ? { duplicate: true as const } : {}),
     botId: created.id,
     name: created.name,
-    title: created.title,
     threadId: created.threadId,
   };
 }
@@ -670,6 +667,8 @@ async function releaseTeamComputerScreen(
       ...(options?.cancelRunWork ? { cancelRunWork: true } : {}),
     });
   } catch (error) {
+    // No browser runs on a sandbox that is gone, so only its stored profile is left to remove.
+    if (isSandboxGoneError(error)) return { ...computer, providerRef: null };
     getLogger().error("team screen release", error);
     if (error instanceof BrowserStoppedReleaseError) return computer;
     return null;

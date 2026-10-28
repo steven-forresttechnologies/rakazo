@@ -13,7 +13,36 @@ const vault = vi.hoisted(() => ({
   list: vi.fn(),
   put: vi.fn(),
   remove: vi.fn(),
+  reveal: vi.fn(),
 }));
+
+// The dialog itself is tested on its own; here it is a pair of buttons that settle it.
+vi.mock("./ConfirmIdentityDialog", async () => {
+  const { useState } = await import("react");
+  const { runWithIdentityConfirmation } = await import("@rakazo/contracts");
+  return {
+    useIdentityConfirmation: () => {
+      const [settle, setSettle] = useState<((confirmed: boolean) => void) | null>(null);
+      const done = (confirmed: boolean) => {
+        settle?.(confirmed);
+        setSettle(null);
+      };
+      return {
+        withIdentityConfirmation: <T,>(action: () => Promise<T>) =>
+          runWithIdentityConfirmation(
+            action,
+            () => new Promise<boolean>((resolve) => setSettle(() => resolve)),
+          ),
+        identityDialog: settle ? (
+          <div data-testid="identity-dialog">
+            <button type="button" data-testid="identity-confirm" onClick={() => done(true)} />
+            <button type="button" data-testid="identity-cancel" onClick={() => done(false)} />
+          </div>
+        ) : null,
+      };
+    },
+  };
+});
 
 vi.mock("../lib/rpc", () => ({
   rpc: { vault },
@@ -35,9 +64,28 @@ vi.mock("@rakazo/ui-web", () => ({
   Input: (props: ComponentProps<"input">) => <input {...props} />,
   NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
   NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
+  Label: ({ htmlFor: _htmlFor, ...props }: ComponentProps<"label">) => <span {...props} />,
+  Switch: ({
+    checked,
+    onCheckedChange,
+    size: _size,
+    ...props
+  }: Omit<ComponentProps<"button">, "onChange"> & {
+    checked: boolean;
+    onCheckedChange: (checked: boolean) => void;
+    size?: string;
+  }) => (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onCheckedChange(!checked)}
+      {...props}
+    />
+  ),
 }));
 
-import { VaultSettings } from "./VaultSettings";
+import { REVEAL_MS, VaultSettings } from "./VaultSettings";
 
 const FAKE_VALUE = "fake-value-SENTINEL-1";
 const stamp = "2026-09-01T00:00:00.000Z";
@@ -107,6 +155,7 @@ beforeEach(() => {
   vault.list.mockReset().mockResolvedValue(rows);
   vault.put.mockReset();
   vault.remove.mockReset().mockResolvedValue({ ok: true });
+  vault.reveal.mockReset();
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -146,7 +195,7 @@ describe("VaultSettings", () => {
     expect(container.querySelector('[data-testid="vault-card"]')).toBeNull();
     await click("credential-add");
     const form = byTestId("vault-card").querySelector('[data-testid="credential-add-form"]');
-    expect(form?.textContent).toContain("Encrypted and never shown again");
+    expect(form).not.toBeNull();
     // The form has its own save and cancel, so the add action steps aside while it is open.
     expect(container.querySelector('[data-testid="credential-add"]')).toBeNull();
   });
@@ -227,15 +276,58 @@ describe("VaultSettings", () => {
     expect(container.innerHTML).not.toContain(FAKE_VALUE);
   });
 
-  it("encodes a website login with encodeLoginSecret", async () => {
+  const loginRows = () => [
+    ...container.querySelectorAll<HTMLElement>('[data-testid="login-field"]'),
+  ];
+
+  async function setInput(input: HTMLInputElement, value: string) {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  async function fillLoginRow(index: number, label: string, value: string) {
+    const row = () => loginRows()[index]!;
+    await setInput(row().querySelector<HTMLInputElement>('input[aria-label="Label"]')!, label);
+    await setInput(row().querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!, value);
+  }
+
+  async function clickButton(row: HTMLElement, selector: string) {
+    await act(async () => row.querySelector<HTMLElement>(selector)!.click());
+  }
+
+  it("encodes a website login's fields with encodeLoginSecret", async () => {
     vault.put.mockResolvedValue(rows[3]);
     await render();
     await click("credential-add");
     await type("credential-name", "portal2");
     await type("credential-origin", "https://portal.example.com");
     await type("credential-auth-type", "login");
-    await type("credential-username", " jamie ");
-    await type("credential-value", FAKE_VALUE);
+
+    expect(
+      loginRows().map((row) => [
+        row.querySelector<HTMLInputElement>('input[aria-label="Label"]')!.value,
+        row.querySelector('[role="switch"]')!.getAttribute("aria-checked"),
+      ]),
+    ).toEqual([
+      ["Username", "false"],
+      ["Password", "true"],
+    ]);
+    await fillLoginRow(0, "Account number", " 12345678 ");
+    await fillLoginRow(1, "Password", FAKE_VALUE);
+    await act(async () => {
+      [...container.querySelectorAll("button")].find((b) => b.textContent === "Add field")!.click();
+    });
+    expect(byTestId<HTMLButtonElement>("credential-add-save").disabled).toBe(true);
+    await fillLoginRow(2, "Postcode", "AB1 2CD");
+    expect(
+      loginRows()[2]!.querySelector<HTMLInputElement>('input[aria-label="Postcode"]')!.type,
+    ).toBe("password");
+    await clickButton(loginRows()[2]!, '[role="switch"]');
+    expect(
+      loginRows()[2]!.querySelector<HTMLInputElement>('input[aria-label="Postcode"]')!.type,
+    ).toBe("text");
     await click("credential-add-save");
 
     expect(vault.put).toHaveBeenCalledWith({
@@ -245,8 +337,31 @@ describe("VaultSettings", () => {
         origin: "https://portal.example.com",
         auth: { type: "login" },
       },
-      value: encodeLoginSecret({ username: "jamie", password: FAKE_VALUE }),
+      value: encodeLoginSecret({
+        fields: [
+          { label: "Account number", value: "12345678", hidden: false },
+          { label: "Password", value: FAKE_VALUE, hidden: true },
+          { label: "Postcode", value: "AB1 2CD", hidden: false },
+        ],
+      }),
     });
+    expect(container.innerHTML).not.toContain(FAKE_VALUE);
+  });
+
+  it("can't save a login until every field has its own label and a value", async () => {
+    await render();
+    await click("credential-add");
+    await type("credential-name", "portal2");
+    await type("credential-origin", "https://portal.example.com");
+    await type("credential-auth-type", "login");
+    await fillLoginRow(0, "Code", "fake-code");
+    await fillLoginRow(1, "code", FAKE_VALUE);
+    expect(byTestId<HTMLButtonElement>("credential-add-save").disabled).toBe(true);
+
+    await clickButton(loginRows()[1]!, '[aria-label="Remove"]');
+    expect(loginRows()).toHaveLength(1);
+    expect(loginRows()[0]!.querySelector('[aria-label="Remove"]')).toBeNull();
+    expect(byTestId<HTMLButtonElement>("credential-add-save").disabled).toBe(false);
   });
 
   it("replaces a value on the same destination", async () => {
@@ -424,5 +539,138 @@ describe("VaultSettings command variables", () => {
       destination: { name: "netbird-setup-key", auth: { type: "command" } },
       value: FAKE_VALUE,
     });
+  });
+});
+
+describe("VaultSettings show", () => {
+  const confirmationRequired = Object.assign(new Error("Confirm it's you"), {
+    code: "IDENTITY_CONFIRMATION_REQUIRED",
+  });
+  const text = (testId: string) =>
+    container.querySelector(`[data-testid="${testId}"]`)?.textContent ?? null;
+  const shown = () => container.querySelector('[data-testid="credential-revealed"]');
+
+  it("shows a value with a copy button, then hides it on request", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    vault.reveal.mockResolvedValue({ value: FAKE_VALUE });
+    await render();
+    expect(byTestId("credential-show-api").getAttribute("aria-label")).toBe("Show");
+    await click("credential-show-api");
+    expect(vault.reveal).toHaveBeenCalledWith({ scope: "account", name: "api" });
+    expect(text("credential-revealed-value")).toBe(FAKE_VALUE);
+    expect(byTestId("credential-show-api").getAttribute("aria-label")).toBe("Hide");
+    // A shown value never lands in the query cache.
+    const cached = queryClient
+      .getQueryCache()
+      .getAll()
+      .map((query) => query.state.data);
+    expect(JSON.stringify(cached)).not.toContain(FAKE_VALUE);
+
+    await act(async () => {
+      shown()?.querySelector<HTMLButtonElement>('[aria-label="Copy"]')?.click();
+    });
+    expect(writeText).toHaveBeenCalledWith(FAKE_VALUE);
+
+    await click("credential-show-api");
+    expect(shown()).toBeNull();
+    expect(container.innerHTML).not.toContain(FAKE_VALUE);
+  });
+
+  it("shows each field of a website login with its label", async () => {
+    vault.reveal.mockResolvedValue({
+      fields: [
+        { label: "Username", value: "jamie", hidden: false },
+        { label: "PIN", value: FAKE_VALUE, hidden: true },
+      ],
+    });
+    await render();
+    await click("credential-show-portal");
+    expect(
+      [...container.querySelectorAll('[data-testid="credential-revealed-field"]')].map(
+        (field) => field.parentElement!.textContent,
+      ),
+    ).toEqual(["Usernamejamie", `PIN${FAKE_VALUE}`]);
+  });
+
+  it("asks the person to confirm it's them, then retries", async () => {
+    vault.reveal
+      .mockRejectedValueOnce(confirmationRequired)
+      .mockResolvedValueOnce({ value: FAKE_VALUE });
+    await render();
+    await click("credential-show-api");
+    expect(byTestId("identity-dialog")).toBeTruthy();
+    expect(container.innerHTML).not.toContain(FAKE_VALUE);
+    await click("identity-confirm");
+    expect(vault.reveal).toHaveBeenCalledTimes(2);
+    expect(text("credential-revealed-value")).toBe(FAKE_VALUE);
+    expect(container.querySelector('[data-testid="identity-dialog"]')).toBeNull();
+  });
+
+  it("shows nothing and no error when the confirmation is dismissed", async () => {
+    vault.reveal.mockRejectedValue(confirmationRequired);
+    await render();
+    await click("credential-show-api");
+    await click("identity-cancel");
+    expect(vault.reveal).toHaveBeenCalledTimes(1);
+    expect(shown()).toBeNull();
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("hides the value after a while and when another row action opens", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vault.reveal.mockResolvedValue({ value: FAKE_VALUE });
+      await render();
+      await click("credential-show-api");
+      expect(text("credential-revealed-value")).toBe(FAKE_VALUE);
+      await act(async () => {
+        vi.advanceTimersByTime(REVEAL_MS);
+      });
+      expect(shown()).toBeNull();
+
+      await click("credential-show-api");
+      expect(text("credential-revealed-value")).toBe(FAKE_VALUE);
+      await click("credential-replace-custom");
+      expect(shown()).toBeNull();
+      expect(container.innerHTML).not.toContain(FAKE_VALUE);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("drops a pending show without asking to confirm once another action opens", async () => {
+    let reject: (error: unknown) => void = () => undefined;
+    vault.reveal.mockReturnValueOnce(
+      new Promise((_resolve, rejectReveal) => {
+        reject = rejectReveal;
+      }),
+    );
+    await render();
+    await click("credential-show-api");
+    expect(byTestId<HTMLButtonElement>("credential-show-custom").disabled).toBe(true);
+    await click("credential-replace-custom");
+    // Cancelling frees the other Show actions right away.
+    expect(byTestId<HTMLButtonElement>("credential-show-api").disabled).toBe(false);
+    await act(async () => reject(confirmationRequired));
+    await flush();
+    expect(container.querySelector('[data-testid="identity-dialog"]')).toBeNull();
+    expect(vault.reveal).toHaveBeenCalledTimes(1);
+    expect(byTestId("credential-replace-value")).toBeTruthy();
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("offers no show on a row whose saved settings can't be read", async () => {
+    vault.list.mockResolvedValue([
+      {
+        name: "legacy",
+        origin: "https://legacy.example.com",
+        auth: null,
+        createdAt: stamp,
+        updatedAt: stamp,
+      },
+    ]);
+    await render();
+    expect(container.querySelector('[data-testid="credential-show-legacy"]')).toBeNull();
   });
 });

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import type { LoginFieldInput } from "@rakazo/contracts";
 import type { ReactNode } from "react";
 import { act } from "react";
 import type { Root } from "react-dom/client";
@@ -49,7 +50,7 @@ const secretCard: AskBlock = {
 async function render(
   block: AskBlock,
   onDismiss: () => Promise<void> = async () => undefined,
-  onAnswer: (text: string, username?: string) => Promise<void> = async () => undefined,
+  onAnswer: (text: string, fields?: LoginFieldInput[]) => Promise<void> = async () => undefined,
 ) {
   await act(async () =>
     root.render(
@@ -194,6 +195,95 @@ it("keeps an accepted secret Save answered without a block update", async () => 
   expect(container.querySelector("input")).toBeNull();
   expect(container.querySelector("button")).toBeNull();
   expect(container.querySelector(".text-destructive")).toBeNull();
+});
+
+const loginCard: AskBlock = {
+  kind: "ask",
+  text: "Sign in to Example",
+  input: "secret",
+  credential: {
+    name: "example_login",
+    origin: "https://login.example.test",
+    auth: { type: "login" },
+  },
+  loginFields: ["ID number", "Phone number", "PIN"],
+  status: "pending",
+};
+
+function loginInput(label: string) {
+  return container.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
+}
+
+function hiddenSwitch(label: string) {
+  return [...container.querySelectorAll('[data-testid="login-field-value"]')]
+    .find((row) => row.querySelector(`input[aria-label="${label}"]`))!
+    .querySelector<HTMLElement>('[role="switch"]')!;
+}
+
+it("starts an ID and a phone visible and a PIN hidden, and the person can flip each", async () => {
+  const onAnswer = vi.fn(async () => undefined);
+  await render(loginCard, undefined, onAnswer);
+
+  for (const [label, hidden] of [
+    ["ID number", false],
+    ["Phone number", false],
+    ["PIN", true],
+  ] as const) {
+    expect(loginInput(label).type).toBe(hidden ? "password" : "text");
+    expect(hiddenSwitch(label).getAttribute("aria-checked")).toBe(String(hidden));
+    const description = hiddenSwitch(label).getAttribute("aria-describedby")!;
+    expect(document.getElementById(description)?.textContent).toBe(label);
+  }
+  await type("ID number", " fake-id-123 ");
+  await type("Phone number", "+1 555 0100");
+  expect(button("Save")!.disabled).toBe(true);
+  await type("PIN", "0000");
+  await act(async () => hiddenSwitch("Phone number").click());
+  expect(loginInput("Phone number").type).toBe("password");
+  await act(async () => hiddenSwitch("PIN").click());
+  expect(loginInput("PIN").type).toBe("text");
+
+  await act(async () => button("Save")!.click());
+
+  expect(onAnswer).toHaveBeenCalledWith("", [
+    { label: "ID number", value: " fake-id-123 ", hidden: false },
+    { label: "Phone number", value: "+1 555 0100", hidden: true },
+    { label: "PIN", value: "0000", hidden: false },
+  ]);
+  expect(container.textContent).toContain("Saved");
+  expect(container.textContent).not.toContain("fake-id-123");
+  expect(container.querySelector("input")).toBeNull();
+});
+
+it("starts every field hidden when no label names an identifier", async () => {
+  await render({ ...loginCard, loginFields: ["Memorable word", "Card number"] });
+
+  for (const label of ["Memorable word", "Card number"]) {
+    expect(loginInput(label).type).toBe("password");
+    expect(hiddenSwitch(label).getAttribute("aria-checked")).toBe("true");
+  }
+});
+
+it("asks for a visible username and a hidden password when the bot names no fields", async () => {
+  const onAnswer = vi.fn(async () => undefined);
+  const { loginFields: _, ...defaultLogin } = loginCard;
+  await render(defaultLogin, undefined, onAnswer);
+
+  expect(
+    [...container.querySelectorAll("input[aria-label]")].map((input) => input.ariaLabel),
+  ).toEqual(["Username", "Password"]);
+  expect(loginInput("Username").type).toBe("text");
+  expect(hiddenSwitch("Username").getAttribute("aria-checked")).toBe("false");
+  expect(loginInput("Password").type).toBe("password");
+  expect(hiddenSwitch("Password").getAttribute("aria-checked")).toBe("true");
+  await type("Username", "fake-user");
+  await type("Password", "fake-password");
+  await act(async () => button("Save")!.click());
+
+  expect(onAnswer).toHaveBeenCalledWith("", [
+    { label: "Username", value: "fake-user", hidden: false },
+    { label: "Password", value: "fake-password", hidden: true },
+  ]);
 });
 
 it("keeps an accepted question choice answered until the block updates", async () => {
@@ -424,7 +514,7 @@ it("quotes an edited reply and marks a sent draft", async () => {
   expect(container.textContent).toContain("Sent");
 });
 
-it("quotes a typed answer under the options it did not match", async () => {
+it("dims the options a typed answer did not match", async () => {
   await render({
     kind: "ask",
     text: "Which city?",
@@ -435,7 +525,8 @@ it("quotes a typed answer under the options it did not match", async () => {
       { id: "seoul", label: "Seoul" },
     ],
   });
-  expect(container.querySelector('[data-testid="ask-answer"]')?.textContent).toBe("Paris");
+  expect(container.querySelector('[data-testid="ask-answer"]')).toBeNull();
+  expect(container.textContent).not.toContain("Paris");
   expect(container.querySelector("[aria-pressed]")).toBeNull();
 
   await render({

@@ -10,7 +10,9 @@ import { resolveLoginFill, shellCommandEnvironment } from "./bot-secrets.js";
 import {
   browserActFromTool,
   browserNavigateFromTool,
+  browserResultForModel,
   browserSnapshotFromTool,
+  redactBrowserResult,
 } from "./browser-tools.js";
 import { BACKGROUND_WORK_LAUNCH } from "./computer-idle.js";
 import {
@@ -28,12 +30,12 @@ import {
   unchangedVisualLoopToolResult,
   unchangedVisualStreakAfterPageBrowser,
 } from "./computer-tools.js";
-import { redactConnectorPayload } from "./connector-safety.js";
 import {
   desktopProtectionGuardMessage,
   protectedComputerLifecycleRefusal,
 } from "./desktop-command-guard.js";
 import { nativeShellCommandArgv } from "./native-shell.js";
+import { resolvePurchaseCardFill, resolvePurchasePayTokenFill } from "./purchase-service.js";
 import type { RunContext } from "./run-context.js";
 import { addRunSecrets } from "./run-context.js";
 import { builtinOffered } from "./run-instructions.js";
@@ -47,7 +49,6 @@ import {
 import { DESKTOP_HELD_FOR_TAKEOVER_MESSAGE } from "./takeover-resume.js";
 import { getActiveTeachingSession } from "./teaching-session.js";
 
-/** Append to the computer's Activity feed. */
 function appendComputerCommand(ctx: RunContext, payload: ComputerCommand) {
   const { deps, run, runId, bot, thread } = ctx;
   return (
@@ -147,7 +148,7 @@ export async function pageBrowserTool(ctx: RunContext, call: ToolCall) {
         : null;
   return computerScreenToolResult(async () => {
     const result = tool
-      ? redactConnectorPayload(
+      ? redactBrowserResult(
           await tool(ctx.providers.browser, await ctx.computer.get("tool", name), context, args, {
             desktopTools,
           }),
@@ -181,7 +182,33 @@ export async function pageBrowserTool(ctx: RunContext, call: ToolCall) {
               });
               if ("error" in resolved) return resolved;
               addRunSecrets(ctx, resolved.redactions);
+              return { text: resolved.text, origin: resolved.origin, hidden: resolved.hidden };
+            },
+            resolveCardFill: async (step) => {
+              const paymentWallet = deps.paymentWallet;
+              if (!paymentWallet) return { error: "Card fills are unavailable here." };
+              const resolved = await resolvePurchaseCardFill(
+                { prisma: deps.prisma, secretStore: deps.secretStore, paymentWallet },
+                run,
+                step.purchase,
+                step.field,
+              );
+              if ("error" in resolved) return resolved;
+              addRunSecrets(ctx, resolved.redactions);
               return { text: resolved.text, origin: resolved.origin };
+            },
+            resolvePayTokenFill: async (step) => {
+              const paymentWallet = deps.paymentWallet;
+              if (!paymentWallet) return { error: "Pay tokens are unavailable here." };
+              const resolved = await resolvePurchasePayTokenFill(
+                { prisma: deps.prisma, secretStore: deps.secretStore, paymentWallet },
+                run,
+                step.purchase,
+              );
+              if ("error" in resolved) return resolved;
+              addRunSecrets(ctx, resolved.redactions);
+              const { text, origin, merchantAccountId } = resolved;
+              return { text, origin, merchantAccountId };
             },
           },
         );
@@ -190,7 +217,7 @@ export async function pageBrowserTool(ctx: RunContext, call: ToolCall) {
       name,
       result,
     );
-    return result;
+    return browserResultForModel(result);
   }, call.finish);
 }
 
@@ -270,7 +297,6 @@ export const computerTools: ToolHandlers = {
       prisma: deps.prisma,
       secretStore: deps.secretStore,
       scope: run,
-      spaceEnvironment: ctx.agentEnvironment,
       registerRedactions: (values) => addRunSecrets(ctx, values),
     });
     ctx.computer.checkpoint.markDirty();

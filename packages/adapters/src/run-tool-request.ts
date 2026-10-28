@@ -20,6 +20,7 @@ import { validCloudAgentArgs } from "./cloud-agent-tools.js";
 import { sanitizeConnectorError } from "./connector-safety.js";
 import { isFleetApprovalTool, prepareFleetRequest } from "./fleet-tools.js";
 import { assertConnectorToolArgs, CATALOG_EXECUTE } from "./lazy-tool-catalog.js";
+import { paidRequestEffect, restorePaidRequest } from "./paid-request.js";
 import type { RunContext } from "./run-context.js";
 import {
   approvalReplayEffectToolName,
@@ -89,7 +90,7 @@ export async function resolveToolRequest(
       error: "Invalid cloud agent arguments. Raw environment variables are not supported.",
     };
   }
-  let effectRequest: unknown = args;
+  let effectRequest: unknown = name === "paid_request" ? paidRequestEffect(args) : args;
   if (connectorCall.route && deps.connector?.resolveCall) {
     try {
       const resolved = await deps.connector.resolveCall(connectorCall, context);
@@ -218,7 +219,14 @@ export async function resolveToolRequest(
     } else {
       // Catalog wrappers keep resolveCall's parsed args so Zod stripping/coercion
       // still matches the first-approval effect key and execute payload.
+      const live = args;
       args = approvedReplayArgs(approvedRequest, args, CATALOG_APPROVAL_TOOL);
+      if (name === "paid_request") {
+        const restored = restorePaidRequest(args, live);
+        if ("error" in restored && typeof restored.error === "string")
+          return { error: restored.error };
+        args = restored;
+      }
     }
     // Bound / shrink-direct approvals may skip catalog parse — reject before execute
     // if they no longer match the live schema.
@@ -255,6 +263,42 @@ export async function resolveToolRequest(
  * Check bot-management and instruction-proposal preconditions, and canonicalize the
  * requests whose approval card shows resolved names. Updates the request in place.
  */
+// Runs whose prompt someone other than the owner wrote; their text stays in the chat's history.
+const OUTSIDE_RUN_TRIGGERS = [
+  "webhook",
+  "messaging",
+  "bot_message",
+  "spawn",
+  "cloud_agent",
+  "tickets",
+];
+
+/** Earlier outside text in the chat can steer this run even when the run itself took in none. */
+async function threadHasOutsideHistory(
+  prisma: RunContext["deps"]["prisma"],
+  threadId: string,
+  botId: string,
+): Promise<boolean> {
+  const [message, run] = await Promise.all([
+    prisma.message.findFirst({
+      where: {
+        threadId,
+        OR: [
+          { role: "bot", botId: { not: botId } },
+          { blocks: { array_contains: [{ kind: "channel_message" }] } },
+          { blocks: { array_contains: [{ kind: "bot_message_received" }] } },
+        ],
+      },
+      select: { id: true },
+    }),
+    prisma.run.findFirst({
+      where: { threadId, trigger: { in: OUTSIDE_RUN_TRIGGERS } },
+      select: { id: true },
+    }),
+  ]);
+  return Boolean(message || run);
+}
+
 export async function prepareToolRequest(
   ctx: RunContext,
   request: ToolRequest,
@@ -289,6 +333,19 @@ export async function prepareToolRequest(
         error:
           "Changes to the bots you manage are blocked for the rest of this run because it received a channel or webhook message.",
       };
+  }
+  if (name === "update_bot" && !argumentGiven(args.bot_id) && argumentGiven(args.instructions)) {
+    if (isSubagentToolExecution(executionId)) return { error: "Helpers cannot set instructions." };
+    // Only the owner's own words may become instructions unseen: no outside message, and no
+    // outside tool result in this attempt's context, restored or new. The creation intro has
+    // no tools that read outside content, and answering its question clears the checkpoint.
+    const ownWords =
+      !(await ctx.trust.receivedOutsideMessage()) &&
+      (run.trigger === "created" || (ctx.source.ownerStartedRun && !ctx.state.tainted)) &&
+      !(await threadHasOutsideHistory(deps.prisma, run.threadId, bot.id));
+    if (!ownWords) return { error: "Propose your instructions with propose_instructions_update." };
+    if (redactSecrets(String(args.instructions), ctx.secrets) !== args.instructions)
+      return { error: "Instructions cannot contain credentials." };
   }
   if (name === "propose_instructions_update") {
     try {
