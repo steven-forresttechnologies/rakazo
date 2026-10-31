@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isRetryableProviderUnavailable, isTransientModelError } from "./model-errors.js";
+import {
+  isModelCredentialRejected,
+  isRetryableProviderUnavailable,
+  isTransientModelError,
+} from "./model-errors.js";
 
 describe("transient model errors", () => {
   it.each([
@@ -120,6 +124,23 @@ describe("transient model errors", () => {
     "You've reached your usage limit for this billing cycle.",
   ])("treats the exhausted usage window as permanent: %s", (message) => {
     expect(isTransientModelError({ status: 403, type: "permission_error", message })).toBe(false);
+  });
+
+  it("moves to a backup without retrying a quota that resets hours from now", () => {
+    const daily = (reset: number) =>
+      `429 ${JSON.stringify({
+        error: {
+          message: "Rate limit exceeded: free-models-per-day",
+          code: 429,
+          metadata: {
+            headers: { "X-RateLimit-Remaining": "0", "X-RateLimit-Reset": String(reset) },
+          },
+        },
+      })}`;
+    const exhausted = { errorMessage: daily(Date.now() + 10 * 60 * 60_000) };
+    expect(isTransientModelError(exhausted)).toBe(false);
+    expect(isRetryableProviderUnavailable(exhausted)).toBe(true);
+    expect(isTransientModelError({ errorMessage: daily(Date.now() + 30_000) })).toBe(true);
   });
 });
 
@@ -402,5 +423,70 @@ describe("provider availability classification", () => {
     ["transient server failure", { status: 503, message: "service unavailable" }, true],
   ])("classifies %s", (_label, error, expected) => {
     expect(isRetryableProviderUnavailable(error)).toBe(expected);
+  });
+});
+
+describe("rejected model credentials", () => {
+  it.each([
+    '401 {"type":"error","error":{"type":"authentication_error","message":"OAuth access token has been revoked."}}',
+    'Token refresh failed. status=400; body={"error":"invalid_grant","error_description":"Refresh token not found or invalid"}',
+    "401 Incorrect API key provided",
+    "invalid_api_key",
+    "Your authentication token has been invalidated.",
+  ])("rejects %s without a retry", (message) => {
+    expect(isModelCredentialRejected(new Error(message))).toBe(true);
+    expect(isTransientModelError(new Error(message))).toBe(false);
+  });
+
+  it.each([
+    "503 overloaded",
+    "429 rate limit",
+    "context_length_exceeded",
+    "400 bad request",
+    "403 permission_error: model not allowed",
+  ])("does not reject %s", (message) => {
+    expect(isModelCredentialRejected(new Error(message))).toBe(false);
+  });
+});
+
+describe("message-only API status wrappers", () => {
+  it("uses a backup for exhausted credits reported inside a parenthesized API status", () => {
+    const error = new Error(
+      'API error (403): {"error":"You have run out of credits or need a Grok subscription"}',
+    );
+    expect(isRetryableProviderUnavailable(error)).toBe(true);
+    expect(isTransientModelError(error)).toBe(false);
+  });
+
+  it.each([
+    "API error (403): Permission denied: out of credits",
+    "API error (401): You have run out of credits",
+    "API error (400): Unsupported parameter: credits",
+  ])("does not classify a terminal response as an outage: %s", (error) => {
+    expect(isRetryableProviderUnavailable(error)).toBe(false);
+    expect(isTransientModelError(error)).toBe(false);
+  });
+});
+
+describe("postfixed credential failures", () => {
+  it.each(["credential expired", "credential revoked", "token expired", "token revoked"])(
+    "recognizes %s even beside a retryable transport hint",
+    (message) => {
+      const error = new Error(`${message}; request timeout`);
+      expect(isModelCredentialRejected(error)).toBe(true);
+      expect(isRetryableProviderUnavailable(error)).toBe(false);
+      expect(isTransientModelError(error)).toBe(false);
+    },
+  );
+  it.each(["token missing", "credential missing"])("does not retry %s", (message) => {
+    expect(isRetryableProviderUnavailable(`${message}; timeout`)).toBe(false);
+  });
+  it("does not treat an expired credential plus exhausted quota as account exhaustion", () => {
+    expect(
+      isRetryableProviderUnavailable({
+        status: 403,
+        message: "credential expired; quota exhausted",
+      }),
+    ).toBe(false);
   });
 });

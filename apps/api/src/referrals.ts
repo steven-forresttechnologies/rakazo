@@ -3,15 +3,22 @@ import type { BillingProvider } from "@rakazo/adapter-kit";
 import type { BillingStatus } from "@rakazo/contracts";
 import { BYOK_MONTHLY_PRICE_CENTS } from "@rakazo/contracts";
 import type { PrismaClient } from "@rakazo/db";
-import { billingAccountForOrganization, Prisma, reconcileCreditPurchase } from "@rakazo/db";
+import {
+  billingAccountForOrganization,
+  hasBillingAccess,
+  Prisma,
+  reconcileCreditPurchase,
+} from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 
 const CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
 const CODE_LENGTH = 8;
 
+type Outcome = "declined" | "balance" | "credits" | "free_period";
+
 /**
- * An organization that has subscribed earns a free month of the own-key plan for each invited
- * organization that subscribes with a card no other organization has used.
+ * Each owner earns a free month for every invited organization that subscribes with a card no
+ * other referral has used.
  */
 export function createReferrals(deps: {
   prisma: PrismaClient;
@@ -33,26 +40,52 @@ export function createReferrals(deps: {
         return created.code;
       } catch (error) {
         // A concurrent create for this organization, or a code collision; the next pass settles it.
-        if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"))
-          throw error;
+        if (!isUniqueViolation(error)) throw error;
       }
     }
   }
 
-  async function decline(organizationId: string) {
-    await prisma.referral.updateMany({
-      where: { organizationId, rewardKind: null, declinedAt: null },
-      data: { declinedAt: new Date() },
+  /** Saves the outcome once and returns the stored one, which a concurrent settle may have set. */
+  async function decide(organizationId: string, outcome: Outcome, cardFingerprint: string) {
+    const undecided = { organizationId, outcome: null };
+    try {
+      await prisma.referral.updateMany({ where: undecided, data: { outcome, cardFingerprint } });
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+      // Another referral was already settled with this card.
+      await prisma.referral.updateMany({ where: undecided, data: { outcome: "declined" } });
+    }
+    const stored = await prisma.referral.findUniqueOrThrow({
+      where: { organizationId },
+      select: { outcome: true },
+    });
+    return stored.outcome;
+  }
+
+  async function extendFreePeriod(organizationId: string, referrerOrganizationId: string) {
+    await prisma.$transaction(async (tx) => {
+      const marked = await tx.referral.updateMany({
+        where: { organizationId, rewardedAt: null },
+        data: { rewardedAt: new Date() },
+      });
+      if (marked.count === 0) return;
+      await tx.modelCreditAccount.upsert({
+        where: { organizationId: referrerOrganizationId },
+        create: { organizationId: referrerOrganizationId },
+        update: {},
+      });
+      // One statement, so concurrent rewards each add their month.
+      await tx.$executeRaw`
+        UPDATE model_credit_accounts
+        SET "byokFreeUntil" = GREATEST(COALESCE("byokFreeUntil", now()), now()) + interval '30 days'
+        WHERE "organizationId" = ${referrerOrganizationId}`;
     });
   }
 
   return {
-    async status(
-      organizationId: string,
-      account: { subscribedAt: Date | null } | null,
-      isOwner: boolean,
-    ): Promise<BillingStatus["referral"]> {
-      if (!enabled || !isOwner || !account?.subscribedAt) return null;
+    enabled,
+    async status(organizationId: string, isOwner: boolean): Promise<BillingStatus["referral"]> {
+      if (!enabled || !isOwner) return null;
       const [code, rewards] = await Promise.all([
         codeFor(organizationId),
         prisma.referral.count({
@@ -77,10 +110,9 @@ export function createReferrals(deps: {
     },
 
     /**
-     * Called whenever the invited organization's subscription grants access, after its card is
-     * stored. The decision and its reward kind are saved before granting, and the grant is
-     * idempotent, so the next sync finishes an interrupted reward exactly as decided. A failure
-     * never blocks the sync.
+     * Called whenever the invited organization's subscription grants access. The outcome is saved
+     * before granting and every grant is idempotent, so the next sync finishes an interrupted
+     * reward exactly as decided. A failure never blocks the sync.
      */
     async settle(organizationId: string, cardFingerprint: string | undefined) {
       if (!enabled || !cardFingerprint) return;
@@ -88,57 +120,45 @@ export function createReferrals(deps: {
         const referral = await prisma.referral.findUnique({
           where: { organizationId },
           select: {
+            outcome: true,
             rewardedAt: true,
-            declinedAt: true,
-            rewardKind: true,
             referrerOrganizationId: true,
             referrer: { select: { billing: true, modelCredits: { select: { mode: true } } } },
           },
         });
-        if (!referral || referral.rewardedAt || referral.declinedAt) return;
-        const referrerBilling = referral.referrer.billing;
-        if (!referrerBilling) return decline(organizationId);
-        let kind = referral.rewardKind;
-        if (!kind) {
-          // Each organization stores its card before this check, so of two using one card, the
-          // later one always sees the earlier.
-          const cardUsedElsewhere =
-            (await prisma.billingCardFingerprint.count({
-              where: { fingerprint: cardFingerprint, organizationId: { not: organizationId } },
-            })) > 0;
-          if (
-            cardUsedElsewhere ||
-            // The referrer may not have synced since fingerprints were stored.
-            (await provider.getCustomerSubscription(referrerBilling.customerId))
-              ?.cardFingerprint === cardFingerprint
-          )
-            return decline(organizationId);
-          // Monthly credit invoices turn what is paid into credits, so a balance would buy nothing.
-          await prisma.referral.updateMany({
-            where: { organizationId, rewardKind: null, declinedAt: null },
-            data: {
-              rewardKind:
-                referral.referrer.modelCredits?.mode === "credits" ? "credits" : "balance",
-            },
-          });
-          kind = (
-            await prisma.referral.findUniqueOrThrow({
-              where: { organizationId },
-              select: { rewardKind: true },
-            })
-          ).rewardKind;
-          if (!kind) return;
+        if (!referral || referral.rewardedAt) return;
+        const { billing, modelCredits } = referral.referrer;
+        let outcome = referral.outcome;
+        if (!outcome) {
+          const referrerCard =
+            billing &&
+            (await provider.getCustomerSubscription(billing.customerId))?.cardFingerprint;
+          outcome = await decide(
+            organizationId,
+            referrerCard === cardFingerprint
+              ? "declined"
+              : // Monthly credit invoices turn what is paid into credits, so a balance buys nothing.
+                modelCredits?.mode === "credits"
+                ? "credits"
+                : billing && hasBillingAccess(billing.status)
+                  ? "balance"
+                  : "free_period",
+            cardFingerprint,
+          );
         }
         const referenceId = `referral_${organizationId}`;
-        if (kind === "credits")
+        if (outcome === "free_period")
+          return extendFreePeriod(organizationId, referral.referrerOrganizationId);
+        if (outcome === "credits")
           await reconcileCreditPurchase(prisma, referral.referrerOrganizationId, {
             id: referenceId,
             amountCents: rewardCents!,
           });
-        else
-          await provider.grantBalanceCredit!(referrerBilling.customerId, rewardCents!, referenceId);
+        else if (outcome === "balance" && billing)
+          await provider.grantBalanceCredit!(billing.customerId, rewardCents!, referenceId);
+        else return;
         await prisma.referral.updateMany({
-          where: { organizationId, rewardedAt: null, declinedAt: null },
+          where: { organizationId, rewardedAt: null },
           data: { rewardedAt: new Date() },
         });
       } catch (error) {
@@ -146,6 +166,10 @@ export function createReferrals(deps: {
       }
     },
   };
+}
+
+function isUniqueViolation(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
 function newCode() {

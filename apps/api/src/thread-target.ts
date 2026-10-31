@@ -20,6 +20,7 @@ import {
   BACKGROUND_RUN_TRIGGERS,
   callIdFromClientNonce,
   isConversationalRun,
+  messageBypassesTakeoverWait,
   messageReaction,
   projectMessages,
   QUEUE_HOLDING_RUN_STATUSES,
@@ -712,6 +713,7 @@ export async function sendThreadMessage(
     events: ThreadEvents;
     jobs: JobPublisher;
     imageAdmission?: Parameters<typeof assertThreadImageInput>[5];
+    maxAttachmentsPerMessage?: number;
     analytics?: ProductAnalytics;
   },
   actor: Actor,
@@ -726,6 +728,8 @@ export async function sendThreadMessage(
     clientNonce?: string;
   },
   releaseTakeover?: (runId: string) => Promise<void>,
+  /** Runs saved with the message, after the thread lock and before the message is routed. */
+  startRoutines?: (tx: Prisma.TransactionClient) => Promise<Array<{ id: string; status: string }>>,
 ) {
   const existing = await replayExistingSend(
     deps,
@@ -744,6 +748,7 @@ export async function sendThreadMessage(
 
   const commit = () =>
     deps.prisma.$transaction(async (tx) => {
+      let routineRuns: Array<{ id: string; status: string }> = [];
       let replyToMessageId: string | undefined;
       let replyQuote: string | undefined;
       let replyPreview: ReplyPreview | null | undefined;
@@ -793,7 +798,7 @@ export async function sendThreadMessage(
       if (target.kind === "bot") {
         const mentionTargets = splitMentionTargets(input.mentions);
         const { blocks: attachmentBlocks, artifacts } = await resolveSendAttachments(
-          { prisma: tx },
+          { prisma: tx, maxAttachmentsPerMessage: deps.maxAttachmentsPerMessage },
           actor,
           target.botId,
           input.artifactIds,
@@ -805,6 +810,7 @@ export async function sendThreadMessage(
         );
         // Match message counter locking before inspecting runs, without changing counters on rejection.
         await tx.$queryRaw`SELECT id FROM threads WHERE id = ${target.threadId} FOR UPDATE`;
+        routineRuns = (await startRoutines?.(tx)) ?? [];
         const activeRuns = await tx.run.findMany({
           where: {
             threadId: target.threadId,
@@ -898,10 +904,12 @@ export async function sendThreadMessage(
               replyPreview,
             },
           });
-          return { message, runs: answered, eventSeq: event.seq };
+          return { message, runs: answered, routineRuns, eventSeq: event.seq };
         }
-        const holdingRuns = activeRuns.filter((run) =>
-          QUEUE_HOLDING_RUN_STATUSES.some((status) => status === run.status),
+        const holdingRuns = activeRuns.filter(
+          (run) =>
+            QUEUE_HOLDING_RUN_STATUSES.some((status) => status === run.status) &&
+            !messageBypassesTakeoverWait(run),
         );
         const active = holdingRuns.find(steersUserMessage) ?? holdingRuns[0];
         if (active) {
@@ -931,7 +939,7 @@ export async function sendThreadMessage(
               replyPreview,
             },
           });
-          return { message, runs: [active], eventSeq: event.seq };
+          return { message, runs: [active], routineRuns, eventSeq: event.seq };
         }
         const task = await tx.task.create({
           data: {
@@ -980,7 +988,7 @@ export async function sendThreadMessage(
             replyPreview,
           },
         });
-        return { message, runs: [run], eventSeq: event.seq };
+        return { message, runs: [run], routineRuns, eventSeq: event.seq };
       }
 
       const members = await lockAndLoadGroupMembers(tx, actor, target);
@@ -992,7 +1000,7 @@ export async function sendThreadMessage(
         explicitMentions: mentionTargets.botMentionIds,
       });
       const { blocks: attachmentBlocks, artifacts } = await resolveGroupSendAttachments(
-        { prisma: tx },
+        { prisma: tx, maxAttachmentsPerMessage: deps.maxAttachmentsPerMessage },
         actor,
         target.groupId,
         memberBotIds,
@@ -1005,6 +1013,7 @@ export async function sendThreadMessage(
       );
       // Group ownership is locked first, then the thread, as in the normal write path.
       await tx.$queryRaw`SELECT id FROM threads WHERE id = ${target.threadId} FOR UPDATE`;
+      routineRuns = (await startRoutines?.(tx)) ?? [];
       const activeRuns = await tx.run.findMany({
         where: {
           threadId: target.threadId,
@@ -1071,7 +1080,7 @@ export async function sendThreadMessage(
           }
           continue;
         }
-        if (!STEERABLE_RUN_STATUSES.has(run.status)) continue;
+        if (!STEERABLE_RUN_STATUSES.has(run.status) || messageBypassesTakeoverWait(run)) continue;
         const current = activeByBotId.get(run.botId);
         if (!current || (!steersUserMessage(current) && steersUserMessage(run))) {
           activeByBotId.set(run.botId, run);
@@ -1165,7 +1174,7 @@ export async function sendThreadMessage(
           replyPreview,
         },
       });
-      return { message, runs, eventSeq: event.seq };
+      return { message, runs, routineRuns, eventSeq: event.seq };
     });
 
   const committed = await withSerializableRetry(commit).catch(async (error) => {
@@ -1193,7 +1202,7 @@ export async function sendThreadMessage(
       if (steersUserMessage(run)) await releaseTakeover(run.id);
     }
   }
-  await enqueueRunsNeedingContinue(deps.jobs, committed.runs);
+  await enqueueRunsNeedingContinue(deps.jobs, [...committed.routineRuns, ...committed.runs]);
   return sendResult(committed.message, committed.runs);
 }
 

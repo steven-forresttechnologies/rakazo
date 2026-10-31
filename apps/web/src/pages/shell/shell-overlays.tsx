@@ -93,6 +93,7 @@ export function SettingsOverlays({
   renameSpace,
   removeSpace,
   refreshSpaces,
+  openAgentImport,
   alive,
   user,
   refetchSession,
@@ -115,6 +116,7 @@ export function SettingsOverlays({
   renameSpace: (spaceId: string, name: string) => Promise<void>;
   removeSpace: (spaceId: string) => Promise<void>;
   refreshSpaces: () => Promise<void>;
+  openAgentImport: () => void;
   alive: RefObject<boolean>;
   user: { name?: string | null; email?: string } | undefined;
   refetchSession: () => Promise<unknown>;
@@ -167,6 +169,10 @@ export function SettingsOverlays({
             setBootstrapMe((prev) => (prev ? { ...prev, timezone: nextMe.timezone } : nextMe));
           }}
           onAccountImported={refreshSpaces}
+          onImportAgent={() => {
+            setOverlay(null);
+            openAgentImport();
+          }}
           memoryConfig={memoryConfig}
           onMemoryConfigChange={(config) => {
             void writeSaved(queryClient, queries.memory.providerConfig.queryKey(), () => config);

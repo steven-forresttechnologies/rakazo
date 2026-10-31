@@ -1,10 +1,11 @@
 import type { AgentRunRequest, ComputerRef } from "@rakazo/adapter-kit";
-import { SandboxRateLimitError } from "@rakazo/adapter-kit";
+import { SandboxRateLimitError, SandboxUnresponsiveError } from "@rakazo/adapter-kit";
 import type { MessageBlock } from "@rakazo/contracts";
 import { createLogger, createTestSink, installLogger } from "@rakazo/logging";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { createRunExecutor } from "./executor.js";
+import * as runMessages from "./run-messages.js";
 
 const sink = createTestSink();
 
@@ -29,6 +30,7 @@ async function runRoutine(
   toolCalls: Array<{ name: string; args: Record<string, unknown> }>,
   options: {
     takeover?: boolean;
+    takeoverReleased?: boolean;
     native?: boolean;
     nativeUnavailable?: boolean;
     toolFailure?: "abort" | "recover";
@@ -110,10 +112,12 @@ async function runRoutine(
     run: {
       findUnique: vi.fn(async () => run),
       findUniqueOrThrow: vi.fn(async () => run),
-      findFirst: vi.fn(async () => ({
-        bot: { notifyOnFinish: false },
-        thread: { groupId: null },
-      })),
+      // No other run of this bot waits for the computer.
+      findFirst: vi.fn(async (args?: { where?: { status?: unknown } }) =>
+        args?.where?.status === "queued"
+          ? null
+          : { bot: { notifyOnFinish: false }, thread: { groupId: null } },
+      ),
       updateMany: vi.fn(
         async ({
           where,
@@ -196,10 +200,17 @@ async function runRoutine(
       count: vi.fn(async () => 0),
     },
     task: { findUniqueOrThrow: vi.fn(async () => ({ id: run.taskId, prompt: "Sweep the inbox" })) },
-    computer: { updateMany: vi.fn(async () => ({ count: 1 })) },
+    computer: {
+      updateMany: vi.fn(async () => ({ count: 1 })),
+      findFirst: vi.fn(async () => ({
+        state: "running",
+        restorePending: false,
+        screenGeneration: 0,
+      })),
+    },
     connection: { findMany: vi.fn(async () => []) },
     userModelPreference: { findFirst: vi.fn(async () => null) },
-    secret: { findFirst: vi.fn(async () => null) },
+    secret: { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => null) },
     userModelCredential: { findFirst: vi.fn(async () => null) },
     deploymentSettings: {
       findUnique: vi.fn(async () => ({
@@ -254,7 +265,9 @@ async function runRoutine(
       { id: "steering-1", messageId: "message-2", text: "Look at this", blocks: [attachment] },
     ]),
     finalizeRun,
-    pauseRunForTakeover: vi.fn(async () => false),
+    pauseRunForTakeover: vi.fn(async () =>
+      options.takeoverReleased ? { continuationRunId: run.id } : false,
+    ),
   };
   const executorInput = {
     prisma: withEmptyModels(prisma),
@@ -358,6 +371,27 @@ describe("run computer provisioning", () => {
         availableAt: expect.any(Date),
       }),
     );
+  });
+
+  it("spreads retries over minutes while the computer provider is down", async () => {
+    // Every clock read moves on a millisecond, so two separate reads would disagree.
+    let clock = Date.now();
+    const now = vi.spyOn(Date, "now").mockImplementation(() => (clock += 1));
+    try {
+      const before = Date.now();
+      const { run, enqueue } = await runRoutine([], {
+        setupError: new SandboxUnresponsiveError("Boat could not be reached"),
+        onRunStarted: vi.fn(),
+        priorSetupFailures: 2,
+      });
+
+      const [[job]] = enqueue.mock.calls as unknown as [[{ availableAt: Date }]];
+      expect(job.availableAt.getTime() - before).toBeGreaterThanOrEqual(60_000);
+      expect(job.availableAt.getTime() - Date.now()).toBeLessThanOrEqual(60_000);
+      expect(run.wakeAt).toEqual(job.availableAt);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it("retains the setup-failure limit after handing off a run", async () => {
@@ -549,6 +583,22 @@ describe("run computer provisioning", () => {
     expect(provisionComputer).toHaveBeenCalledOnce();
   });
 
+  it("queues the continuation when release wins the race with the takeover pause", async () => {
+    const publish = vi.spyOn(runMessages, "publishMessage").mockResolvedValue(null);
+    try {
+      const { enqueue, finalizeRun } = await runRoutine([], {
+        takeover: true,
+        takeoverReleased: true,
+      });
+      expect(enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "run.continue", payload: { runId: "run-1" } }),
+      );
+      expect(finalizeRun).not.toHaveBeenCalled();
+    } finally {
+      publish.mockRestore();
+    }
+  });
+
   it("restarts the idle timer when it asks the user to take over", async () => {
     const { sleepJobs } = await runRoutine([], { takeover: true });
 
@@ -563,6 +613,48 @@ describe("run computer provisioning", () => {
       "Run setup failed; retrying",
     );
     expect(provisionComputer).toHaveBeenCalledOnce();
+    expect(sink.events).toContainEqual(
+      expect.objectContaining({ level: "error", message: "run setup failed" }),
+    );
+  });
+
+  it("retries setup after a computer provider outage without an error report", async () => {
+    provisionComputer.mockRejectedValue(new SandboxUnresponsiveError("Boat could not be reached"));
+
+    await expect(runRoutine([{ name: "list_files", args: { path: "" } }])).rejects.toThrow(
+      "Run setup failed; retrying",
+    );
+    expect(sink.events).toContainEqual(
+      expect.objectContaining({ level: "warn", message: "run setup failed" }),
+    );
+    expect(sink.events.filter((event) => event.level === "error")).toEqual([]);
+  });
+
+  it("does not report setup that a lost run lease aborted", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      provisionComputer.mockImplementation(
+        async (
+          deps: { prisma: { run: { updateMany: ReturnType<typeof vi.fn> } } },
+          _id: string,
+          context: { signal: AbortSignal },
+        ) => {
+          deps.prisma.run.updateMany.mockResolvedValueOnce({ count: 0 });
+          vi.advanceTimersByTime(60_000);
+          await new Promise((resolve) => context.signal.addEventListener("abort", resolve));
+          throw context.signal.reason;
+        },
+      );
+
+      await runRoutine([{ name: "list_files", args: { path: "" } }]).catch(() => undefined);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(provisionComputer).toHaveBeenCalledOnce();
+    expect(sink.events).toContainEqual(
+      expect.objectContaining({ level: "warn", message: "run setup failed" }),
+    );
+    expect(sink.events.filter((event) => event.level === "error")).toEqual([]);
   });
 
   it("fails the run instead of retrying once setup has failed too many times in a row", async () => {

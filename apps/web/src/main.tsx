@@ -1,3 +1,4 @@
+import "./zod-config";
 import "./monitoring-bootstrap";
 import { BotAvatarActivityProvider, Toaster, TooltipProvider } from "@rakazo/ui-web";
 import { QueryClientProvider } from "@tanstack/react-query";

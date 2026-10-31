@@ -157,6 +157,15 @@ export function SidebarFooter({
             <Button
               variant="ghost"
               className="h-9 w-full justify-start gap-2.5 font-normal"
+              aria-label={t`Settings`}
+              onClick={onSettings}
+            >
+              <Settings className="text-muted-foreground" strokeWidth={1.75} />
+              <Trans>Settings</Trans>
+            </Button>
+            <Button
+              variant="ghost"
+              className="h-9 w-full justify-start gap-2.5 font-normal"
               onClick={onSkills}
             >
               <ScrollText className="text-muted-foreground" strokeWidth={1.75} />
@@ -165,11 +174,41 @@ export function SidebarFooter({
             <Button
               variant="ghost"
               className="h-9 w-full justify-start gap-2.5 font-normal"
+              onClick={onArtifacts}
+            >
+              <FolderOpen className="text-muted-foreground" strokeWidth={1.75} />
+              <Trans>Artifacts</Trans>
+            </Button>
+            {onBoard ? (
+              <Button
+                variant="ghost"
+                className="h-9 w-full justify-start gap-2.5 font-normal"
+                onClick={onBoard}
+              >
+                <SquareKanban className="text-muted-foreground" strokeWidth={1.75} />
+                <Trans>Board</Trans>
+              </Button>
+            ) : null}
+            {links.map((link) => (
+              <Button
+                key={link.id}
+                variant="ghost"
+                className="h-9 w-full justify-start gap-2.5 font-normal"
+                onClick={() => onLink?.(link)}
+              >
+                <Link2 className="text-muted-foreground" strokeWidth={1.75} />
+                {link.label}
+              </Button>
+            ))}
+            <Button
+              variant="ghost"
+              className="h-9 w-full justify-start gap-2.5 font-normal"
               onClick={onUsage}
             >
               <Gauge className="text-muted-foreground" strokeWidth={1.75} />
               <Trans>Usage</Trans>
             </Button>
+            <div className="my-1 border-t border-border" />
             <a
               className={`${buttonVariants({ variant: "ghost" })} h-9 w-full justify-start gap-2.5 font-normal`}
               href={/Android/i.test(navigator.userAgent) ? ANDROID_APK_URL : IOS_APP_STORE_URL}
@@ -198,44 +237,6 @@ export function SidebarFooter({
               <BookOpen className="text-muted-foreground" strokeWidth={1.75} />
               <Trans>Docs</Trans>
             </a>
-            {onBoard ? (
-              <Button
-                variant="ghost"
-                className="h-9 w-full justify-start gap-2.5 font-normal"
-                onClick={onBoard}
-              >
-                <SquareKanban className="text-muted-foreground" strokeWidth={1.75} />
-                <Trans>Board</Trans>
-              </Button>
-            ) : null}
-            {links.map((link) => (
-              <Button
-                key={link.id}
-                variant="ghost"
-                className="h-9 w-full justify-start gap-2.5 font-normal"
-                onClick={() => onLink?.(link)}
-              >
-                <Link2 className="text-muted-foreground" strokeWidth={1.75} />
-                {link.label}
-              </Button>
-            ))}
-            <Button
-              variant="ghost"
-              className="h-9 w-full justify-start gap-2.5 font-normal"
-              onClick={onArtifacts}
-            >
-              <FolderOpen className="text-muted-foreground" strokeWidth={1.75} />
-              <Trans>Artifacts</Trans>
-            </Button>
-            <Button
-              variant="ghost"
-              className="h-9 w-full justify-start gap-2.5 font-normal"
-              aria-label={t`Settings`}
-              onClick={onSettings}
-            >
-              <Settings className="text-muted-foreground" strokeWidth={1.75} />
-              <Trans>Settings</Trans>
-            </Button>
             <div className="my-1 border-t border-border" />
             <Button
               variant="ghost"

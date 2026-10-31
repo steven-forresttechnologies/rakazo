@@ -25,6 +25,7 @@ describe("desktop release workflow", () => {
   });
 
   it("requires signed platform builds before a single publication job", () => {
+    expect(workflow).toContain('RAKAZO_DESKTOP_RELEASE: "1"');
     expect(workflow).toContain("-c.forceCodeSigning=true");
     expect(workflow).toContain("codesign --verify --deep --strict");
     expect(workflow).toContain("Get-AuthenticodeSignature");
@@ -57,8 +58,13 @@ describe("desktop release workflow", () => {
 
   it("always builds Windows and signs it once Azure Artifact Signing is configured", () => {
     expect(workflow).toContain(
-      `WINDOWS_SIGNING: ${expression("secrets.DESKTOP_WIN_AZURE_CLIENT_SECRET != ''")}`,
+      `WINDOWS_SIGNING: ${expression("secrets.DESKTOP_WIN_AZURE_CLIENT_ID != ''")}`,
     );
+    expect(workflow).not.toContain("AZURE_CLIENT_SECRET");
+    expect(workflow).toContain("environment: desktop-release");
+    expect(workflow).toContain("id-token: write");
+    expect(workflow).toContain("azure/login@");
+    expect(workflow).toContain("TimeStamperCertificate");
     expect(workflow).toContain(
       "if: runner.os == 'Windows' && needs.validate.outputs.windows_signed == 'true'",
     );

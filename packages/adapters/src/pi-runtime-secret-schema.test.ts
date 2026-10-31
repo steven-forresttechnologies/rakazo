@@ -56,6 +56,16 @@ describe("request_secret parameters", () => {
     expect(Object.keys(credential).sort()).toEqual(["auth", "name", "origin"]);
   });
 
+  it("tells the model what origin is for, since a command variable leaves it optional", () => {
+    const credentialBranch = oneOfBranches(requestSecretSchema()).find((branch) =>
+      (branch.required ?? []).includes("credential"),
+    );
+    const origin = credentialBranch?.properties?.credential?.properties?.origin as
+      | { description?: string }
+      | undefined;
+    expect(origin?.description).toBeTruthy();
+  });
+
   it("exposes connectionId on the mutually exclusive alternative branch", () => {
     const connectionBranch = oneOfBranches(requestSecretSchema()).find((branch) =>
       (branch.required ?? []).includes("connectionId"),

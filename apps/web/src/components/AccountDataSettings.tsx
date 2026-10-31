@@ -7,7 +7,13 @@ import { errorText } from "../lib/user-error";
 import { SuccessPop } from "./ai/primitives";
 import { useIdentityConfirmation } from "./ConfirmIdentityDialog";
 
-export function AccountDataSettings({ onImported }: { onImported?: () => Promise<void> }) {
+export function AccountDataSettings({
+  onImported,
+  onImportAgent,
+}: {
+  onImported?: () => Promise<void>;
+  onImportAgent?: () => void;
+}) {
   const { t } = useLingui();
   const { withIdentityConfirmation, identityDialog } = useIdentityConfirmation();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -82,6 +88,11 @@ export function AccountDataSettings({ onImported }: { onImported?: () => Promise
           {pending === "import" ? <Spinner aria-hidden /> : null}
           <Trans>Import data</Trans>
         </Button>
+        {onImportAgent ? (
+          <Button variant="outline" disabled={pending !== null} onClick={onImportAgent}>
+            <Trans>Import an agent</Trans>
+          </Button>
+        ) : null}
         <input
           ref={fileInput}
           type="file"

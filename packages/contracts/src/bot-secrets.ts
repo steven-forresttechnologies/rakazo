@@ -174,13 +174,22 @@ function botSecretOriginSchema(allowPrivateHttpOrigin: boolean) {
     );
 }
 
+export const BOT_SECRET_ORIGIN_MISSING_MESSAGE =
+  "Missing. Add the site's address, such as https://www.example.com";
+
 export function botSecretDestinationSchema(options?: { allowPrivateHttpOrigin?: boolean }) {
   const originSchema = botSecretOriginSchema(options?.allowPrivateHttpOrigin === true);
   return z
     .object({
       name: BotSecretName,
       // Empty for a command variable, which has no site. Every other type needs an origin.
-      origin: z.string().max(2048).default(""),
+      origin: z
+        .string()
+        .max(2048)
+        .default("")
+        .describe(
+          "The site's address, such as https://www.example.com. Required unless auth is command.",
+        ),
       auth: BotSecretAuth,
     })
     .superRefine((destination, ctx) => {
@@ -194,6 +203,15 @@ export function botSecretDestinationSchema(options?: { allowPrivateHttpOrigin?: 
         }
         const nameIssue = commandVariableNameIssue(destination.name);
         if (nameIssue) ctx.addIssue({ code: "custom", path: ["name"], message: nameIssue });
+        return;
+      }
+      if (destination.origin === "") {
+        // Say it is missing: "Expected an HTTPS origin" reads as a bad value, and models resend it.
+        ctx.addIssue({
+          code: "custom",
+          path: ["origin"],
+          message: BOT_SECRET_ORIGIN_MISSING_MESSAGE,
+        });
         return;
       }
       const origin = originSchema.safeParse(destination.origin);

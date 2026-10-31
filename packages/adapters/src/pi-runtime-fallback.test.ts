@@ -363,8 +363,8 @@ describe("Pi runtime transient model retries", () => {
   );
 
   it.each([
-    "HTTP 401; servers are overloaded",
-    "invalid api key; terminated",
+    "HTTP 403; servers are overloaded",
+    "permission denied; terminated",
     "context_length_exceeded; 503 overloaded",
     "bad request; terminated",
   ])("does not retry or switch on %s", async (error) => {
@@ -892,19 +892,53 @@ describe("Pi runtime ordered model fallback", () => {
   });
 
   it.each([
-    "400 invalid_request_error: Invalid parameter: credits must be a positive integer.",
+    '401 {"type":"error","error":{"type":"authentication_error","message":"OAuth access token has been revoked."}}',
     "401 You have insufficient credits to make this request.",
-  ])("does not switch to the backup on a non-exhaustion 4xx: %s", async (error) => {
+    "invalid_api_key: Incorrect API key provided",
+  ])(
+    "moves to the configured backup without a retry on a rejected credential: %s",
+    async (error) => {
+      providerState.stream.mockImplementation((target: Model<"openai-completions">) =>
+        target.provider === primary.provider
+          ? stream(target, message(target, [], "error", error))
+          : stream(target, message(target, [{ type: "text", text: "backup answer" }], "stop")),
+      );
+      const events = await run(
+        request([{ provider: backupA.provider, id: backupA.id, apiKey: "backup-key" }]),
+      );
+      expect(events.at(-1)).toEqual({ type: "done", text: "backup answer" });
+      expect(providerState.stream.mock.calls.map(([target]) => target.provider)).toEqual([
+        primary.provider,
+        backupA.provider,
+      ]);
+      expect(providerState.delay).not.toHaveBeenCalled();
+    },
+  );
+
+  it("fails on a rejected credential without retrying when no backup is configured", async () => {
+    const error = "401 OAuth access token has been revoked.";
     providerState.stream.mockImplementation((target: Model<"openai-completions">) =>
       stream(target, message(target, [], "error", error)),
     );
-    await expect(
-      run(request([{ provider: backupA.provider, id: backupA.id, apiKey: "backup-key" }])),
-    ).rejects.toThrow();
-    expect(providerState.stream.mock.calls.map(([target]) => target.provider)).toEqual([
-      primary.provider,
-    ]);
+    await expect(run(request())).rejects.toThrow(error);
+    expect(providerState.stream).toHaveBeenCalledTimes(1);
+    expect(providerState.delay).not.toHaveBeenCalled();
   });
+
+  it.each(["400 invalid_request_error: Invalid parameter: credits must be a positive integer."])(
+    "does not switch to the backup on a non-exhaustion 4xx: %s",
+    async (error) => {
+      providerState.stream.mockImplementation((target: Model<"openai-completions">) =>
+        stream(target, message(target, [], "error", error)),
+      );
+      await expect(
+        run(request([{ provider: backupA.provider, id: backupA.id, apiKey: "backup-key" }])),
+      ).rejects.toThrow();
+      expect(providerState.stream.mock.calls.map(([target]) => target.provider)).toEqual([
+        primary.provider,
+      ]);
+    },
+  );
 
   it("retries a short usage window on the same model without a backup", async () => {
     providerState.stream
@@ -1716,10 +1750,9 @@ describe("Pi runtime ordered model fallback", () => {
       { provider: backupA.provider, id: backupA.id },
       { provider: backupB.provider, id: backupB.id },
     ]);
-    input.model.thinkingLevel = "low";
     input.resolveFallbackModel = async (provider, id) => {
       if (provider === backupB.provider) throw new Error("fake-private-credential-diagnostic");
-      return { provider, id, apiKey: "fake-backup-key" };
+      return { provider, id, apiKey: "fake-backup-key", thinkingLevel: "low" };
     };
     providerState.stream.mockImplementation((target: Model<"openai-completions">) =>
       stream(target, message(target, [], "error", "429 quota exhausted")),
@@ -1773,9 +1806,9 @@ describe("Pi runtime ordered model fallback", () => {
               "toolUse",
             ),
           );
-        return stream(target, message(target, [], "error", "401 Invalid API key"));
+        return stream(target, message(target, [], "error", "400 Invalid request"));
       });
-      await expect(run(input)).rejects.toThrow(/^401 Invalid API key$/);
+      await expect(run(input)).rejects.toThrow(/^400 Invalid request$/);
       expect(calls).toBe(3);
       expect(input.executeTool).toHaveBeenCalledTimes(1);
     },
@@ -1816,7 +1849,7 @@ describe("Pi runtime ordered model fallback", () => {
           target,
           [],
           "error",
-          target.provider === primary.provider ? "429 quota exhausted" : "401 Invalid API key",
+          target.provider === primary.provider ? "429 quota exhausted" : "400 Invalid request",
         ),
       ),
     );
@@ -1827,7 +1860,7 @@ describe("Pi runtime ordered model fallback", () => {
     expect(diagnostic.primaryError).toBe("429 quota exhausted");
     expect(diagnostic.backups[0]).toMatchObject({
       status: "failed",
-      reason: "401 Invalid API key",
+      reason: "400 Invalid request",
     });
   });
 
@@ -1839,7 +1872,7 @@ describe("Pi runtime ordered model fallback", () => {
           target,
           [],
           "error",
-          target.provider === primary.provider ? "429 quota exhausted" : "401 Invalid API key",
+          target.provider === primary.provider ? "429 quota exhausted" : "400 Invalid request",
         ),
       ),
     );
@@ -1849,7 +1882,7 @@ describe("Pi runtime ordered model fallback", () => {
         { provider: backupB.provider, id: backupB.id, apiKey: "fake-backup-b" },
       ]),
     ).catch((error: Error) => error);
-    expect((error as Error).message).toBe("401 Invalid API key");
+    expect((error as Error).message).toBe("400 Invalid request");
     expect(providerState.stream).toHaveBeenCalledTimes(2);
   });
 
@@ -1926,23 +1959,20 @@ describe("Pi runtime ordered model fallback", () => {
     ).toEqual([primary.provider, smallContextBackup.provider]);
   });
 
-  it("skips backups without the primary turn's reasoning capability", async () => {
+  it("runs a backup without reasoning with thinking off when the primary thinks", async () => {
     const reasoningPrimary = { ...primary, reasoning: true };
     const textOnlyBackup = { ...backupA, reasoning: false };
-    const reasoningBackup = { ...backupB, reasoning: true };
     providerState.models.set(`${primary.provider}/${primary.id}`, reasoningPrimary);
     providerState.models.set(`${backupA.provider}/${backupA.id}`, textOnlyBackup);
-    providerState.models.set(`${backupB.provider}/${backupB.id}`, reasoningBackup);
     const input = request([
       { provider: backupA.provider, id: backupA.id, apiKey: "text-only-key" },
-      { provider: backupB.provider, id: backupB.id, apiKey: "reasoning-key" },
     ]);
     input.model.reasoning = true;
     input.model.thinkingLevel = "high";
     providerState.stream.mockImplementation((target: Model<"openai-completions">) =>
       target.provider === primary.provider
         ? stream(target, message(target, [], "error", "429 rate_limit_error"))
-        : stream(target, message(target, [{ type: "text", text: "reasoned" }], "stop")),
+        : stream(target, message(target, [{ type: "text", text: "backup answer" }], "stop")),
     );
 
     await run(input);
@@ -1951,7 +1981,8 @@ describe("Pi runtime ordered model fallback", () => {
       providerState.stream.mock.calls.map(
         ([target]) => (target as Model<"openai-completions">).provider,
       ),
-    ).toEqual([primary.provider, backupB.provider]);
+    ).toEqual([primary.provider, backupA.provider]);
+    expect(providerState.stream.mock.calls[1]?.[2]).toMatchObject({ reasoning: undefined });
   });
 
   it.each([...IMAGE_RETURNING_COMPUTER_TOOLS, "write_effect"])(

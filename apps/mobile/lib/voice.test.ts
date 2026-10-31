@@ -5,16 +5,18 @@ import * as Speech from "expo-speech";
 import { Platform } from "react-native";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { captureApiRequestContext, currentApiBase, rpc } from "./api";
+import { DEVICE_VOICE_KEY } from "./device-voice";
 import {
   createSpeechOwner,
   getVoicePlaybackState,
   pauseVoicePlayback,
-  playMpeg,
+  playSpeechClip,
   resumeVoicePlayback,
   speakQueue,
   speakText,
   speakUtterance,
   speakWithDeviceVoice,
+  speechClipType,
   stopSpeaking,
   stopVoicePlayback,
   subscribeVoicePlayback,
@@ -129,6 +131,15 @@ describe("mobile speech", () => {
     }
   });
 
+  it("plays WAV from a server that renders speech itself and MP3 otherwise", () => {
+    const wav = new TextEncoder().encode("RIFF\0\0\0\0WAVEfmt ");
+    expect(speechClipType(wav)).toEqual({ mimeType: "audio/wav", extension: "wav" });
+    expect(speechClipType(new Uint8Array([0xff, 0xfb, 0x90, 0x00]))).toEqual({
+      mimeType: "audio/mpeg",
+      extension: "mp3",
+    });
+  });
+
   it("listens for an HTML audio clip ending before playback starts", async () => {
     class ImmediateAudio {
       onended: (() => void) | null = null;
@@ -141,7 +152,7 @@ describe("mobile speech", () => {
     }
     vi.stubGlobal("Audio", ImmediateAudio);
 
-    await expect(playMpeg(new Uint8Array([1, 2, 3]))).resolves.toBeUndefined();
+    await expect(playSpeechClip(new Uint8Array([1, 2, 3]))).resolves.toBeUndefined();
   });
 
   it("rejects oversized audio without waiting for response cancellation", async () => {
@@ -208,7 +219,9 @@ class ControllableAudio {
 describe("hosted voice playback controls", () => {
   beforeEach(() => {
     ControllableAudio.instances = [];
-    vi.mocked(SecureStore.getItemAsync).mockResolvedValue(null);
+    vi.mocked(SecureStore.getItemAsync).mockImplementation(async (key) =>
+      key === DEVICE_VOICE_KEY ? "0" : null,
+    );
     vi.mocked(captureApiRequestContext).mockResolvedValue({
       apiBase: "https://support.example",
       headers: { authorization: "Bearer support-token", "x-rakazo-space-id": "space-support" },
@@ -304,6 +317,75 @@ describe("hosted voice playback controls", () => {
     await waitFor(() => secondAudio.paused === false);
     secondAudio.onended?.();
     await expect(spoken).resolves.toBe(true);
+  });
+
+  it("renders the next utterance while the current clip is still playing", async () => {
+    const requested: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: { body?: unknown }) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as { text?: string };
+        requested.push(body.text ?? "");
+        return new Response(new Uint8Array([1, 2, 3]), { status: 200 });
+      }),
+    );
+
+    const spoken = speakText("Read this", { botId: "bot-1" });
+    await waitFor(() => ControllableAudio.instances.length === 1);
+    const firstAudio = ControllableAudio.instances[0]!;
+    await waitFor(() => firstAudio.paused === false);
+
+    await waitFor(() => requested.length === 2);
+    expect(requested).toEqual(["First", "Second"]);
+    expect(ControllableAudio.instances).toHaveLength(1);
+
+    firstAudio.onended?.();
+    await waitFor(() => ControllableAudio.instances.length === 2);
+    const secondAudio = ControllableAudio.instances[1]!;
+    await waitFor(() => secondAudio.paused === false);
+    secondAudio.onended?.();
+
+    await expect(spoken).resolves.toBe(true);
+    expect(getVoicePlaybackState()).toEqual({ status: "idle", canPause: false });
+  });
+
+  it("surfaces a prefetched clip's failure when playback reaches it, with no unhandled rejection", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls += 1;
+        if (calls === 2) throw new Error("Offline.");
+        return new Response(new Uint8Array([1, 2, 3]), { status: 200 });
+      }),
+    );
+
+    try {
+      const spoken = speakText("Read this", { botId: "bot-1" });
+      const outcome = spoken.then(
+        () => "spoken",
+        (error: unknown) => (error instanceof Error ? error.message : String(error)),
+      );
+      await waitFor(() => ControllableAudio.instances.length === 1);
+      const firstAudio = ControllableAudio.instances[0]!;
+      await waitFor(() => firstAudio.paused === false);
+      await waitFor(() => calls === 2);
+      expect(ControllableAudio.instances).toHaveLength(1);
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(unhandled).toEqual([]);
+
+      firstAudio.onended?.();
+      await expect(outcome).resolves.toBe("Offline.");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+      stopVoicePlayback();
+    }
   });
 
   it("stops immediately and resolves the call without playing further utterances", async () => {

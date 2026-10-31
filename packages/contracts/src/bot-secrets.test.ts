@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  BOT_SECRET_ORIGIN_MISSING_MESSAGE,
   BotSecretDestination,
   BotSecretDestinationInput,
   botSecretDestinationSchema,
@@ -29,6 +30,41 @@ describe("credential contracts", () => {
     "https://api.example.test#fragment",
   ])("rejects non-origin destination %s", (origin) => {
     expect(BotSecretDestination.safeParse({ ...destination, origin }).success).toBe(false);
+  });
+  it.each([undefined, ""])(
+    "reports a missing origin (%j) as missing, for a login too",
+    (origin) => {
+      for (const auth of [{ type: "login" }, { type: "bearer" }]) {
+        const result = BotSecretDestination.safeParse({ name: "example_login", origin, auth });
+        expect(result.success).toBe(false);
+        expect(
+          result.error?.issues.map((issue) => ({ path: issue.path, message: issue.message })),
+        ).toEqual([{ path: ["origin"], message: BOT_SECRET_ORIGIN_MISSING_MESSAGE }]);
+      }
+    },
+  );
+  it("keeps the origin rule message for an origin that is present but invalid", () => {
+    const result = BotSecretDestination.safeParse({
+      name: "example_login",
+      origin: "www.example.com",
+      auth: { type: "login" },
+    });
+    const messages = result.error?.issues.map((issue) => issue.message) ?? [];
+    expect(messages).toEqual([
+      "Expected an HTTPS origin without a path, credentials, query, or fragment",
+    ]);
+  });
+  it("accepts a valid login origin, and a command variable without one", () => {
+    expect(
+      BotSecretDestination.safeParse({
+        name: "example_login",
+        origin: "https://www.example.com",
+        auth: { type: "login" },
+      }).success,
+    ).toBe(true);
+    expect(
+      BotSecretDestination.safeParse({ name: "example_cmd", auth: { type: "command" } }).success,
+    ).toBe(true);
   });
   it.each(["feishu-app-credentials", "my-creds-2", "team_a-bot"])(
     "accepts hyphenated credential names like %s",
@@ -503,7 +539,7 @@ describe("command variables", () => {
       ).toBe(true);
     }
     const missing = BotSecretDestination.safeParse({ name: "api", auth });
-    expect(missing.error?.issues[0]?.message).toMatch(/Expected an HTTPS origin/);
+    expect(missing.error?.issues[0]?.message).toBe(BOT_SECRET_ORIGIN_MISSING_MESSAGE);
   });
 
   it("lets the owner input omit the origin only for a command variable", () => {

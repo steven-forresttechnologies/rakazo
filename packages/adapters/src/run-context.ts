@@ -18,6 +18,7 @@ import { getLogger } from "@rakazo/logging";
 import type { ApprovalPausedToolResult, ApprovedEffectReplayQueue } from "./approval-effect.js";
 import { approvalPausedToolResult, approvedEffectOccurrence } from "./approval-effect.js";
 import type { loadBotMessageContext } from "./bot-messages.js";
+import { partitionTools } from "./builtin-tool-bridge.js";
 import type { ComputerExecutionLease } from "./computer-lifecycle.js";
 import type { UnchangedVisualStreak } from "./computer-tools.js";
 import type { selectRunConnections } from "./connection-context.js";
@@ -121,8 +122,6 @@ export interface ApprovalState {
   pausePending: boolean;
   /** The first card of parallel calls that need approval; the others wait for it. */
   request: Promise<ApprovalPausedToolResult> | undefined;
-  /** Runtimes may dispatch parallel calls; a run can open only one proposal at a time. */
-  proposalInFlight: boolean;
 }
 
 /** Which occurrence of an identical effect each tool call claims, across pauses. */
@@ -188,6 +187,8 @@ export interface RunSource {
   messagingChannelRun: boolean;
   channelId: string | undefined;
   historySearchBeforeSeq: number;
+  /** See historyMyChatsAllowed; claimed outside steering still revokes it per call. */
+  myChatsAllowed: boolean;
   voiceCall: boolean;
   callEndRun: boolean;
   callClientNonce: string | null;
@@ -370,7 +371,7 @@ export function restoreTurnCheckpointEffects(
   try {
     const saved = restoreTurnCheckpoint(turnCheckpoint, model);
     const unresolved = new Set(unresolvedTurnCheckpointCalls(saved.messages));
-    const namedTools = namedAgentTools(ctx.tools.offered);
+    const namedTools = namedAgentTools(partitionTools(ctx.tools.offered).listed);
     const available = new Set(namedTools.map((tool) => tool.name));
     if (
       saved.messages.some(

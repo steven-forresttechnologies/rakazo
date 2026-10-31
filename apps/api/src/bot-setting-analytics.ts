@@ -7,7 +7,6 @@ const SETTINGS: Partial<Record<Field, AnalyticsBotSetting>> = {
   name: "name",
   description: "description",
   instructions: "instructions",
-  selfUpdateInstructions: "instruction_updates",
   color: "avatar",
   avatarSet: "avatar",
   notifyOnFinish: "notifications",

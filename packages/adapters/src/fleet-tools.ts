@@ -1,5 +1,4 @@
 import type { AdapterContext, JobPublisher } from "@rakazo/adapter-kit";
-import { runJobKey } from "@rakazo/adapter-kit";
 import type { Actor, Group, MessageBlock } from "@rakazo/contracts";
 import {
   BOT_INSTRUCTIONS_MAX_LENGTH,
@@ -35,7 +34,9 @@ import type { FleetCardSummary } from "./approval-ask.js";
 import { approvalDetailLength, MAX_APPROVAL_SUMMARY_LENGTH } from "./approval-ask.js";
 import { attachedImageArtifactIds, resolveUpdateBotAvatar } from "./bot-avatar.js";
 import { createdByWhere, managedBotsWhere } from "./child-bots.js";
+import { stopCancelledGroupRuns } from "./computer-idle.js";
 import type { ExecutorDeps } from "./executor-deps.js";
+import { resolveModelChoice } from "./model-choice.js";
 import type { BotModelChangeDeps } from "./model-selection.js";
 import { validateBotModelChange } from "./model-selection.js";
 import { listPiCatalog, scriptedCatalogEntry } from "./pi-models.js";
@@ -256,9 +257,9 @@ async function prepareChildModel(
   const thinkingLevel = text(args.thinking_level);
   const clear = args.clear === true;
   if (clear && (provider || model)) {
-    return refuse("Pass either clear: true or provider and model, not both.");
+    return refuse("Pass either clear: true or model, not both.");
   }
-  if (!clear && !(provider && model)) return refuse("Pass provider and model, or clear: true.");
+  if (!clear && !model) return refuse("Pass model, or clear: true.");
   // A model without catalog levels skips the shared check, so the level must be a real one first.
   if (thinkingLevel && !ThinkingLevelSchema.safeParse(thinkingLevel).success) {
     return refuse(`Thinking level must be one of: ${ThinkingLevelSchema.options.join(", ")}`);
@@ -271,13 +272,21 @@ async function prepareChildModel(
     model: child.modelId,
     thinkingLevel: child.thinkingLevel ?? null,
   };
+  const chosen = model
+    ? await resolveModelChoice({ prisma: deps.prisma, ...deps.modelChange }, run, {
+        model,
+        provider,
+        preferredProvider: child.modelProvider,
+      })
+    : undefined;
+  if (chosen && !chosen.ok) return refuse(chosen.error);
   const validated = await validateBotModelChange(
     { prisma: deps.prisma, ...deps.modelChange },
     {
       userId: run.userId,
       spaceId: run.spaceId,
-      provider: provider ?? null,
-      model: model ?? null,
+      provider: chosen?.provider ?? null,
+      model: chosen?.model ?? null,
       thinkingLevel: thinkingLevel ?? null,
       current: previous,
     },
@@ -746,7 +755,7 @@ export async function createFleetGroup(
 
 /** Apply the approved membership change against the members the card was built from. */
 export async function updateFleetGroup(
-  deps: FleetDeps,
+  deps: FleetDeps & Parameters<typeof stopCancelledGroupRuns>[0],
   run: FleetRun,
   canonical: Record<string, unknown>,
 ): Promise<
@@ -766,12 +775,11 @@ export async function updateFleetGroup(
   } catch (error) {
     return repoRefusal(error);
   }
-  await Promise.all(
-    updated.cancelledRunIds.map((runId) =>
-      deps.jobs.cancel(runJobKey(runId)).catch(() => undefined),
-    ),
-  );
   await appendGroupEvent(deps, run, "group.updated", updated.group);
+  // The change is committed: a failed cleanup must not leave the approved effect uncertain.
+  await stopCancelledGroupRuns(deps, run, updated).catch((error) =>
+    getLogger().error("group member teardown", error),
+  );
   const { group } = updated;
   return {
     ok: true,
@@ -957,7 +965,7 @@ export async function setChildBotModel(
       threadId: child.thread.id,
       botId: child.id,
       emitBotUpdated: true,
-      expectedModel: {
+      expectedSettings: {
         modelProvider: child.modelProvider,
         modelId: child.modelId,
         thinkingLevel: child.thinkingLevel ?? null,
@@ -1251,7 +1259,7 @@ function memberNames(members: Member[]): string {
   return members.map((member) => singleLine(member.name)).join(", ");
 }
 
-function modelLabel(provider: string | null, model: string | null): string {
+export function modelLabel(provider: string | null, model: string | null): string {
   if (!provider || !model) return "Default model";
   const catalog = [...listPiCatalog(), scriptedCatalogEntry];
   const catalogProvider = canonicalPiProviderId(provider);

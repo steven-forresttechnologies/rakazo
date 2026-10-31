@@ -166,26 +166,6 @@ describe("CreateBotDialog", () => {
   });
 });
 
-describe("importing instead", () => {
-  it("offers Import only when the parent handles it", async () => {
-    await render(async () => undefined);
-    expect(document.querySelector('[data-testid="create-bot-import"]')).toBeNull();
-
-    const onImport = vi.fn();
-    await act(async () => {
-      root.render(
-        <CreateBotDialog
-          onCancel={() => undefined}
-          onCreate={async () => undefined}
-          onImport={onImport}
-        />,
-      );
-    });
-    await act(async () => button("Import").click());
-    expect(onImport).toHaveBeenCalledTimes(1);
-  });
-});
-
 it("retains the preview identity and colour through rerenders, set toggles and a retry", async () => {
   const onCreate = vi
     .fn(async (_input: CreateBotDialogInput) => undefined)

@@ -896,7 +896,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       getStarted: "Get started",
       download: {
         mac: "Download for macOS",
-        windows: "Download for Windows (Beta)",
+        windows: "Download for Windows",
         linux: "Download for Linux",
         ios: "Download for iOS",
         android: "Download for Android",
@@ -1045,7 +1045,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       getStarted: "Loslegen",
       download: {
         mac: "Für macOS laden",
-        windows: "Für Windows laden (Beta)",
+        windows: "Für Windows laden",
         linux: "Für Linux laden",
         ios: "Für iOS laden",
         android: "Für Android laden",
@@ -1197,7 +1197,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       getStarted: "시작하기",
       download: {
         mac: "macOS용 다운로드",
-        windows: "Windows용 다운로드 (Beta)",
+        windows: "Windows용 다운로드",
         linux: "Linux용 다운로드",
         ios: "iOS용 다운로드",
         android: "Android용 다운로드",
@@ -1349,7 +1349,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       getStarted: "开始使用",
       download: {
         mac: "下载 macOS 版",
-        windows: "下载 Windows 版 (Beta)",
+        windows: "下载 Windows 版",
         linux: "下载 Linux 版",
         ios: "下载 iOS 版",
         android: "下载 Android 版",
@@ -1502,7 +1502,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       getStarted: "はじめる",
       download: {
         mac: "macOS 版をダウンロード",
-        windows: "Windows 版をダウンロード (Beta)",
+        windows: "Windows 版をダウンロード",
         linux: "Linux 版をダウンロード",
         ios: "iOS 版をダウンロード",
         android: "Android 版をダウンロード",
@@ -1655,7 +1655,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       getStarted: "Empezar",
       download: {
         mac: "Descargar para macOS",
-        windows: "Descargar para Windows (Beta)",
+        windows: "Descargar para Windows",
         linux: "Descargar para Linux",
         ios: "Descargar para iOS",
         android: "Descargar para Android",
@@ -1808,7 +1808,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       getStarted: "Commencer",
       download: {
         mac: "Télécharger pour macOS",
-        windows: "Télécharger pour Windows (Beta)",
+        windows: "Télécharger pour Windows",
         linux: "Télécharger pour Linux",
         ios: "Télécharger pour iOS",
         android: "Télécharger pour Android",
@@ -1961,7 +1961,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       getStarted: "Começar",
       download: {
         mac: "Baixar para macOS",
-        windows: "Baixar para Windows (Beta)",
+        windows: "Baixar para Windows",
         linux: "Baixar para Linux",
         ios: "Baixar para iOS",
         android: "Baixar para Android",
@@ -2114,7 +2114,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       getStarted: "Aan de slag",
       download: {
         mac: "Downloaden voor macOS",
-        windows: "Downloaden voor Windows (Beta)",
+        windows: "Downloaden voor Windows",
         linux: "Downloaden voor Linux",
         ios: "Downloaden voor iOS",
         android: "Downloaden voor Android",
@@ -2267,7 +2267,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       getStarted: "Начать",
       download: {
         mac: "Скачать для macOS",
-        windows: "Скачать для Windows (Beta)",
+        windows: "Скачать для Windows",
         linux: "Скачать для Linux",
         ios: "Скачать для iOS",
         android: "Скачать для Android",
@@ -2420,7 +2420,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       getStarted: "Başlayın",
       download: {
         mac: "macOS için indir",
-        windows: "Windows için indir (Beta)",
+        windows: "Windows için indir",
         linux: "Linux için indir",
         ios: "iOS için indir",
         android: "Android için indir",
@@ -2573,7 +2573,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       getStarted: "להתחיל",
       download: {
         mac: "הורדה ל-macOS",
-        windows: "הורדה ל-Windows (Beta)",
+        windows: "הורדה ל-Windows",
         linux: "הורדה ל-Linux",
         ios: "הורדה ל-iOS",
         android: "הורדה ל-Android",
@@ -2726,7 +2726,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       getStarted: "शुरू करें",
       download: {
         mac: "macOS के लिए डाउनलोड करें",
-        windows: "Windows के लिए डाउनलोड करें (Beta)",
+        windows: "Windows के लिए डाउनलोड करें",
         linux: "Linux के लिए डाउनलोड करें",
         ios: "iOS के लिए डाउनलोड करें",
         android: "Android के लिए डाउनलोड करें",
@@ -2878,7 +2878,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       getStarted: "開始使用",
       download: {
         mac: "下載 macOS 版",
-        windows: "下載 Windows 版 (Beta)",
+        windows: "下載 Windows 版",
         linux: "下載 Linux 版",
         ios: "下載 iOS 版",
         android: "下載 Android 版",

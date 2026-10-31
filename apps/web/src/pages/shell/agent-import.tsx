@@ -36,8 +36,6 @@ import {
   NativeSelect,
   NativeSelectOption,
   Textarea,
-  ToggleGroup,
-  ToggleGroupItem,
 } from "@rakazo/ui-web";
 import {
   Collapsible,
@@ -62,36 +60,16 @@ const STATUS_WARNINGS: ReadonlySet<AgentImportWarning> = new Set([
   "bundled_files",
 ]);
 
-const panelStyle = { section: "mt-6", heading: "text-sm text-foreground" };
-// Matches SignupSurvey's step style.
-const pageStyle = { section: "mt-6 first:mt-0", heading: "text-sm font-medium text-foreground" };
-
-export type AgentImportCreateRequest = Parameters<typeof rpc.bots.importCreate>[0];
+const sectionClass = "mt-6";
+const headingClass = "text-sm text-foreground";
 
 export function AgentImportForm({
-  onBack,
-  onCancel,
+  onClose,
   onCreated,
-  createBot = (input) => rpc.bots.importCreate(input),
-  layout = "panel",
-  bots = [],
-  initialSource,
 }: {
-  onBack: () => void;
-  onCancel: () => void;
+  onClose: () => void;
   onCreated: (bot: Bot) => void;
-  /** How the bot is created; onboarding wraps it so a first bot is only made once. */
-  createBot?: (input: AgentImportCreateRequest) => Promise<Bot>;
-  /** `page` is an onboarding step; `panel` is the shell's side panel. */
-  layout?: "panel" | "page";
-  /** Bots the import can be added to; empty (onboarding) always makes a new bot. */
-  bots?: readonly Bot[];
-  /** A folder or backup dropped into a chat, previewed straight away. */
-  initialSource?: AgentImportReader;
 }) {
-  const page = layout === "page";
-  const { section: sectionClass, heading: headingClass } = page ? pageStyle : panelStyle;
-  const [kind, setKind] = useState<"folder" | "document">("folder");
   const { t } = useLingui();
   const statusText = useImportStatusText();
   const ids = useId();
@@ -111,21 +89,16 @@ export function AgentImportForm({
   const archiveInput = useRef<HTMLInputElement>(null);
   const [plan, setPlan] = useState<AgentImportPlan | null>(null);
   const [unchecked, setUnchecked] = useState<Set<string>>(new Set());
-  // For an existing bot the model box starts unticked, whatever it was for a new bot.
-  const [modelPicked, setModelPicked] = useState(false);
   const [destinations, setDestinations] = useState<Record<string, AgentImportMemoryDestination>>(
     {},
   );
-  const [target, setTarget] = useState<"new" | "existing">("new");
-  const [targetBotId, setTargetBotId] = useState("");
-  const [replaceInstructions, setReplaceInstructions] = useState(false);
-  const targetBot = target === "existing" ? bots.find((bot) => bot.id === targetBotId) : undefined;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [computerMode, setComputerMode] = useState<ComputerMode>("team");
   const [reply, setReply] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
   // Bumped by every new read, so a slower earlier one never lands over it.
   const latestRead = useRef(0);
   const [error, setError] = useState<string | null>(null);
@@ -198,7 +171,6 @@ export function AgentImportForm({
         setDestinations({});
         setName(found.suggestedName);
         setDescription(found.suggestedDescription);
-        setModelPicked(false);
       }
       setPlan(found);
     } catch (err) {
@@ -245,9 +217,6 @@ export function AgentImportForm({
       setBusy(false);
     }
   }
-
-  const loadSourceRef = useRef(loadSource);
-  loadSourceRef.current = loadSource;
 
   /** The opt-in reads `.env`/`auth.json` now, and sends only their allowlisted entries. */
   async function toggleSecrets(checked: boolean) {
@@ -318,10 +287,6 @@ export function AgentImportForm({
     [],
   );
 
-  useEffect(() => {
-    if (initialSource) void loadSourceRef.current(initialSource);
-  }, [initialSource]);
-
   const secretsAvailable =
     hasSecretFiles || sourceFiles.some(({ home, content }) => hasAgentImportSecrets(home, content));
 
@@ -382,31 +347,21 @@ export function AgentImportForm({
   const tooLong =
     combineImportedInstructions(selectedInstructions).length > BOT_INSTRUCTIONS_MAX_LENGTH;
 
-  const ready =
-    target === "new"
-      ? Boolean(name.trim())
-      : Boolean(targetBot) && !(replaceInstructions && tooLong);
+  const ready = Boolean(name.trim()) && !tooLong;
 
   async function create() {
-    if (!plan || !ready || (target === "new" && tooLong) || busy) return;
+    if (!plan || !ready || busy) return;
     setError(null);
+    setCreating(true);
     setBusy(true);
     try {
-      const bot = await createBot({
+      const bot = await rpc.bots.importCreate({
         importKey: importKey.current ?? undefined,
         files,
         includeSecrets,
         skillFiles,
-        ...(targetBot
-          ? {
-              destination: {
-                kind: "existing" as const,
-                botId: targetBot.id,
-                replaceInstructions,
-                expectedInstructions: targetBot.instructions,
-              },
-            }
-          : { name: name.trim(), description: description.trim() }),
+        name: name.trim(),
+        description: description.trim(),
         computerMode,
         selection: {
           instructions: selectedInstructions.map((item) => item.id),
@@ -416,13 +371,7 @@ export function AgentImportForm({
           skills: chosen(plan.skills)
             .filter((item) => item.status.kind !== "unsupported")
             .map((item) => item.id),
-          // An existing bot's model changes only when the user ticks it here.
-          model: Boolean(
-            plan.model &&
-              modelUsable &&
-              !unchecked.has(plan.model.id) &&
-              (target === "new" || modelPicked),
-          ),
+          model: Boolean(plan.model && modelUsable && !unchecked.has(plan.model.id)),
           mcpServers: chosen(plan.mcpServers)
             .filter((item) => item.status.kind !== "unsupported")
             .map((item) => item.id),
@@ -433,12 +382,12 @@ export function AgentImportForm({
       onCreated(bot);
     } catch (err) {
       failure(err, t`Could not create bot`);
+      setCreating(false);
       setBusy(false);
     }
   }
 
   function toggle(id: string, checked: boolean) {
-    if (id === plan?.model?.id) setModelPicked(checked);
     setUnchecked((current) => {
       const next = new Set(current);
       if (checked) next.delete(id);
@@ -460,11 +409,7 @@ export function AgentImportForm({
         <div className="flex min-h-9 flex-wrap items-center gap-x-3">
           <Checkbox
             aria-label={title}
-            checked={
-              !disabled &&
-              !unchecked.has(id) &&
-              (id !== plan?.model?.id || target === "new" || modelPicked)
-            }
+            checked={!disabled && !unchecked.has(id)}
             disabled={disabled}
             onCheckedChange={(checked) => toggle(id, checked)}
           />
@@ -550,122 +495,49 @@ export function AgentImportForm({
 
   return (
     <div data-testid="agent-import">
-      {page ? (
-        <h1 className="text-[32px] font-medium text-foreground">
-          <Trans>Import an agent</Trans>
-        </h1>
-      ) : (
-        <div className="mb-4 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t`Back`}
-              onClick={() => {
-                stopReading();
-                if (plan) setPlan(null);
-                else onBack();
-              }}
-            >
-              <ArrowLeft size={16} strokeWidth={1.8} />
-            </Button>
-            <span className="text-[13.5px] text-muted-foreground">
-              <Trans>Import an agent</Trans>
-            </span>
-          </div>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1">
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label={t`Cancel new bot`}
+            aria-label={t`Back`}
+            disabled={creating}
             onClick={() => {
               stopReading();
-              onCancel();
+              if (plan) setPlan(null);
+              else onClose();
             }}
           >
-            <X size={16} strokeWidth={1.8} />
+            <ArrowLeft size={16} strokeWidth={1.8} />
           </Button>
+          <span className="text-[13.5px] text-muted-foreground">
+            <Trans>Import an agent</Trans>
+          </span>
         </div>
-      )}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={t`Cancel new bot`}
+          onClick={() => {
+            stopReading();
+            onClose();
+          }}
+        >
+          <X size={16} strokeWidth={1.8} />
+        </Button>
+      </div>
       {error ? (
         <p
           role="alert"
           data-testid="agent-import-error"
-          className={page ? "mt-3 text-sm text-destructive" : "mb-3 text-[13px] text-destructive"}
+          className="mb-3 text-[13px] text-destructive"
         >
           {error}
         </p>
       ) : null}
       {plan ? (
-        <div data-testid="agent-import-preview" className={page ? "mt-8" : undefined}>
-          {bots.length ? (
-            <section data-testid="agent-import-destination">
-              <ToggleGroup
-                aria-label={t`Where to import`}
-                value={[target]}
-                onValueChange={([next]) => {
-                  if (next) setTarget(next as "new" | "existing");
-                }}
-                spacing={1}
-                className="grid w-full grid-cols-2 rounded-lg bg-muted p-1"
-              >
-                <ToggleGroupItem
-                  value="new"
-                  className="aria-pressed:bg-background aria-pressed:shadow-sm"
-                >
-                  <Trans>New bot</Trans>
-                </ToggleGroupItem>
-                <ToggleGroupItem
-                  value="existing"
-                  className="aria-pressed:bg-background aria-pressed:shadow-sm"
-                >
-                  <Trans>Add to an existing bot</Trans>
-                </ToggleGroupItem>
-              </ToggleGroup>
-              {target === "existing" ? (
-                <>
-                  <NativeSelect
-                    aria-label={t`Bot`}
-                    value={targetBotId}
-                    onChange={(event) => setTargetBotId(event.target.value)}
-                    className="mt-3 w-full"
-                  >
-                    <NativeSelectOption value="">{t`Choose a bot`}</NativeSelectOption>
-                    {bots.map((bot) => (
-                      <NativeSelectOption key={bot.id} value={bot.id}>
-                        {bot.name}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
-                  {targetBot ? (
-                    <ToggleGroup
-                      aria-label={t`Instructions`}
-                      value={[replaceInstructions ? "replace" : "keep"]}
-                      onValueChange={([next]) => {
-                        if (next) setReplaceInstructions(next === "replace");
-                      }}
-                      spacing={1}
-                      className="mt-3 grid w-full grid-cols-2 rounded-lg bg-muted p-1"
-                      data-testid="agent-import-instructions-choice"
-                    >
-                      <ToggleGroupItem
-                        value="keep"
-                        className="aria-pressed:bg-background aria-pressed:shadow-sm"
-                      >
-                        <Trans>Keep its instructions</Trans>
-                      </ToggleGroupItem>
-                      <ToggleGroupItem
-                        value="replace"
-                        className="aria-pressed:bg-background aria-pressed:shadow-sm"
-                      >
-                        <Trans>Replace its instructions</Trans>
-                      </ToggleGroupItem>
-                    </ToggleGroup>
-                  ) : null}
-                </>
-              ) : null}
-            </section>
-          ) : null}
-          {plan.instructions.length && (target === "new" || replaceInstructions) ? (
+        <div data-testid="agent-import-preview">
+          {plan.instructions.length ? (
             <section className={sectionClass} data-testid="agent-import-instructions">
               <h3 className={headingClass}>
                 <Trans>Instructions</Trans>
@@ -906,93 +778,42 @@ export function AgentImportForm({
               </CollapsibleContent>
             </Collapsible>
           ) : null}
-          {target === "new" ? (
-            <>
-              <label htmlFor={`${ids}-name`} className={`mt-6 block ${headingClass}`}>
-                <Trans>Name</Trans>
-                <Input
-                  id={`${ids}-name`}
-                  value={name}
-                  maxLength={BOT_NAME_MAX_LENGTH}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder={t`Name this bot`}
-                  className="mt-2"
-                />
-              </label>
-              {plan.suggestedDescription ? (
-                <label htmlFor={`${ids}-description`} className={`mt-6 block ${headingClass}`}>
-                  <Trans>Description</Trans>
-                  <Input
-                    id={`${ids}-description`}
-                    value={description}
-                    maxLength={BOT_DESCRIPTION_MAX_LENGTH}
-                    onChange={(event) => setDescription(event.target.value)}
-                    className="mt-2"
-                  />
-                </label>
-              ) : null}
-              <ComputerModePicker value={computerMode} onChange={setComputerMode} />
-            </>
+          <label htmlFor={`${ids}-name`} className={`mt-6 block ${headingClass}`}>
+            <Trans>Name</Trans>
+            <Input
+              id={`${ids}-name`}
+              value={name}
+              maxLength={BOT_NAME_MAX_LENGTH}
+              onChange={(event) => setName(event.target.value)}
+              placeholder={t`Name this bot`}
+              className="mt-2"
+            />
+          </label>
+          {plan.suggestedDescription ? (
+            <label htmlFor={`${ids}-description`} className={`mt-6 block ${headingClass}`}>
+              <Trans>Description</Trans>
+              <Input
+                id={`${ids}-description`}
+                value={description}
+                maxLength={BOT_DESCRIPTION_MAX_LENGTH}
+                onChange={(event) => setDescription(event.target.value)}
+                className="mt-2"
+              />
+            </label>
           ) : null}
-          <div className={page ? "mt-8 flex gap-3" : "mt-5"}>
-            <Button
-              disabled={!ready || (target === "new" && tooLong) || busy}
-              onClick={() => void create()}
-            >
-              {busy ? (
-                <Trans>Creating…</Trans>
-              ) : target === "existing" ? (
-                <Trans>Add</Trans>
-              ) : (
-                <Trans>Create</Trans>
-              )}
+          <ComputerModePicker value={computerMode} onChange={setComputerMode} />
+          <div className="mt-5">
+            <Button disabled={!ready || busy} onClick={() => void create()}>
+              {busy ? <Trans>Creating…</Trans> : <Trans>Create</Trans>}
             </Button>
-            {page ? (
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => {
-                  stopReading();
-                  setPlan(null);
-                }}
-              >
-                <Trans>Back</Trans>
-              </Button>
-            ) : null}
           </div>
         </div>
       ) : (
-        <div data-testid="agent-import-choose" className={page ? "mt-8" : undefined}>
-          {page ? (
-            <ToggleGroup
-              aria-label={t`Import an agent`}
-              value={[kind]}
-              onValueChange={([next]) => {
-                if (next) setKind(next as "folder" | "document");
-              }}
-              spacing={1}
-              className="grid w-full grid-cols-2 rounded-lg bg-muted p-1"
-            >
-              <ToggleGroupItem
-                value="folder"
-                className="aria-pressed:bg-background aria-pressed:shadow-sm"
-              >
-                <Trans>OpenClaw or Hermes</Trans>
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="document"
-                className="aria-pressed:bg-background aria-pressed:shadow-sm"
-              >
-                <Trans>Another assistant</Trans>
-              </ToggleGroupItem>
-            </ToggleGroup>
-          ) : null}
-          <section className={page ? (kind === "folder" ? "mt-6" : "hidden") : undefined}>
-            {page ? null : (
-              <h3 className={headingClass}>
-                <Trans>OpenClaw or Hermes</Trans>
-              </h3>
-            )}
+        <div data-testid="agent-import-choose">
+          <section>
+            <h3 className={headingClass}>
+              <Trans>OpenClaw or Hermes</Trans>
+            </h3>
             <input
               ref={(node) => {
                 folderInput.current = node;
@@ -1031,7 +852,7 @@ export function AgentImportForm({
                 event.target.value = "";
               }}
             />
-            <div className={page ? "grid gap-3 sm:grid-cols-2" : "mt-2 flex gap-2"}>
+            <div className="mt-2 flex gap-2">
               <Button
                 variant="outline"
                 disabled={busy}
@@ -1048,17 +869,11 @@ export function AgentImportForm({
               </Button>
             </div>
           </section>
-          <section className={page ? (kind === "document" ? "mt-6" : "hidden") : sectionClass}>
-            {page ? null : (
-              <h3 className={headingClass}>
-                <Trans>Another assistant</Trans>
-              </h3>
-            )}
-            <Button
-              variant="outline"
-              className={page ? "w-full" : "mt-2"}
-              onClick={() => void copyPrompt()}
-            >
+          <section className={sectionClass}>
+            <h3 className={headingClass}>
+              <Trans>Another assistant</Trans>
+            </h3>
+            <Button variant="outline" className="mt-2" onClick={() => void copyPrompt()}>
               {copied ? <Trans>Copied</Trans> : <Trans>Copy prompt</Trans>}
             </Button>
             <Textarea
@@ -1097,18 +912,6 @@ export function AgentImportForm({
               </Button>
             </div>
           </section>
-          {page ? (
-            <Button
-              variant="outline"
-              className="mt-8"
-              onClick={() => {
-                stopReading();
-                onBack();
-              }}
-            >
-              <Trans>Back</Trans>
-            </Button>
-          ) : null}
         </div>
       )}
     </div>

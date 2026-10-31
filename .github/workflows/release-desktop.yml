@@ -89,7 +89,7 @@ jobs:
         id: platforms
         env:
           # Windows ships unsigned until Azure Artifact Signing is configured.
-          WINDOWS_SIGNING: ${{ secrets.DESKTOP_WIN_AZURE_CLIENT_SECRET != '' }}
+          WINDOWS_SIGNING: ${{ secrets.DESKTOP_WIN_AZURE_CLIENT_ID != '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -102,6 +102,11 @@ jobs:
     needs: validate
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    # Azure trusts GitHub OIDC tokens only from this environment, so Windows signing needs no stored secret.
+    environment: desktop-release
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -124,6 +129,7 @@ jobs:
         run: pnpm --filter @rakazo/web build && pnpm --filter @rakazo/desktop build
         env:
           RAKAZO_ALLOW_DEV_SECRETS: "1"
+          RAKAZO_DESKTOP_RELEASE: "1"
 
       - name: Require macOS signing and notarization credentials
         if: runner.os == 'macOS'
@@ -256,6 +262,14 @@ jobs:
           lipo "$native/@koromix/koffi-darwin-arm64/darwin_arm64/koffi.node" -verify_arch arm64
           lipo "$native/@oxc-parser/binding-darwin-x64/parser.darwin-x64.node" -verify_arch x86_64
           lipo "$native/@oxc-parser/binding-darwin-arm64/parser.darwin-arm64.node" -verify_arch arm64
+          # Dictation's system recognizer captures audio itself, so it needs the microphone entitlement too.
+          speech="$app/Contents/Resources/speech/rakazo-speech"
+          lipo "$speech" -verify_arch x86_64 arm64
+          entitlements="$(mktemp)"
+          codesign -d --entitlements :- "$speech" > "$entitlements" 2>/dev/null
+          test "$(/usr/libexec/PlistBuddy -c "Print :com.apple.security.device.audio-input" "$entitlements")" = true
+          rm -f "$entitlements"
+          "$speech" xx < /dev/null | grep -Fq '"language-not-supported"'
           ELECTRON_RUN_AS_NODE=1 "$app/Contents/MacOS/Rakazo" -e '
             const { createRequire } = require("node:module");
             const appRequire = createRequire(`${process.argv[1]}/Contents/Resources/app.asar/package.json`);
@@ -275,8 +289,6 @@ jobs:
         shell: bash
         env:
           AZURE_TENANT_ID: ${{ secrets.DESKTOP_WIN_AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.DESKTOP_WIN_AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.DESKTOP_WIN_AZURE_CLIENT_SECRET }}
           SIGNING_ENDPOINT: ${{ vars.DESKTOP_WIN_SIGNING_ENDPOINT }}
           SIGNING_ACCOUNT: ${{ vars.DESKTOP_WIN_SIGNING_ACCOUNT }}
           SIGNING_PROFILE: ${{ vars.DESKTOP_WIN_SIGNING_PROFILE }}
@@ -284,20 +296,21 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$AZURE_TENANT_ID"
-          test -n "$AZURE_CLIENT_ID"
-          test -n "$AZURE_CLIENT_SECRET"
           test -n "$SIGNING_ENDPOINT"
           test -n "$SIGNING_ACCOUNT"
           test -n "$SIGNING_PROFILE"
           test -n "$SIGNING_PUBLISHER"
+      - name: Log in to Azure for Windows signing
+        if: runner.os == 'Windows' && needs.validate.outputs.windows_signed == 'true'
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.DESKTOP_WIN_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.DESKTOP_WIN_AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
       - name: Package signed x64 Windows app
         if: runner.os == 'Windows' && needs.validate.outputs.windows_signed == 'true'
         shell: bash
         env:
-          # Read by the TrustedSigning PowerShell module that electron-builder invokes.
-          AZURE_TENANT_ID: ${{ secrets.DESKTOP_WIN_AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.DESKTOP_WIN_AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.DESKTOP_WIN_AZURE_CLIENT_SECRET }}
           SIGNING_ENDPOINT: ${{ vars.DESKTOP_WIN_SIGNING_ENDPOINT }}
           SIGNING_ACCOUNT: ${{ vars.DESKTOP_WIN_SIGNING_ACCOUNT }}
           SIGNING_PROFILE: ${{ vars.DESKTOP_WIN_SIGNING_PROFILE }}
@@ -345,6 +358,8 @@ jobs:
             if ($signature.Status -ne "Valid") {
               throw "$($executable.Name) signature is $($signature.Status)."
             }
+            # Artifact Signing certificates last days; only a timestamp keeps the signature valid after that.
+            if (-not $signature.TimeStamperCertificate) { throw "$($executable.Name) is not timestamped." }
             if ($signature.SignerCertificate.GetNameInfo("SimpleName", $false) -ne $env:SIGNING_PUBLISHER) {
               throw "$($executable.Name) is not signed by the configured publisher."
             }

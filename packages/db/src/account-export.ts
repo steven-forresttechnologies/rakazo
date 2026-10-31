@@ -147,7 +147,6 @@ async function* spaceRecords(
       name: bot.name,
       description: bot.description,
       instructions: bot.instructions,
-      selfUpdateInstructions: bot.selfUpdateInstructions,
       color: bot.color,
       avatarSet: bot.avatarSet,
       notifyOnFinish: bot.notifyOnFinish,

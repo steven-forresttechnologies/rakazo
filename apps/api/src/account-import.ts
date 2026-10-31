@@ -754,7 +754,6 @@ class AccountImporter implements ArchiveSink {
         await tx.bot.update({
           where: { id: botId },
           data: {
-            selfUpdateInstructions: record.selfUpdateInstructions,
             pinned: record.pinned,
             position: record.position,
             sectionId: space.optional(record.sectionId),

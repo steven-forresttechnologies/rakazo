@@ -28,7 +28,6 @@ export const AnalyticsBotSetting = z.enum([
   "name",
   "description",
   "instructions",
-  "instruction_updates",
   "avatar",
   "notifications",
   "memory",

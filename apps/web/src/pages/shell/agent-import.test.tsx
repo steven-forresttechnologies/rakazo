@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import { i18n } from "@lingui/core";
-import type { AgentImportPlan } from "@rakazo/contracts";
+import type { AgentImportPlan, Bot } from "@rakazo/contracts";
 import type * as Core from "@rakazo/core";
 import type { ReactNode } from "react";
-import { act, StrictMode } from "react";
+import { act } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,8 +17,14 @@ vi.mock("@lingui/react/macro", () => {
 });
 
 const importPreview = vi.fn();
+const importCreate = vi.fn();
 vi.mock("../../lib/rpc", () => ({
-  rpc: { bots: { importPreview: (input: unknown) => importPreview(input) } },
+  rpc: {
+    bots: {
+      importPreview: (input: unknown) => importPreview(input),
+      importCreate: (input: unknown) => importCreate(input),
+    },
+  },
 }));
 
 vi.mock("@rakazo/core", async (importOriginal) => ({
@@ -40,6 +46,7 @@ let container: HTMLDivElement | null = null;
 
 beforeEach(() => {
   importPreview.mockReset();
+  importCreate.mockReset();
   i18n.load("en", {});
   i18n.activate("en");
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -81,13 +88,7 @@ describe("choosing backups while a file is being read", () => {
     document.body.append(container);
     root = createRoot(container);
     await act(async () => {
-      root!.render(
-        <AgentImportForm
-          onBack={() => undefined}
-          onCancel={() => undefined}
-          onCreated={() => undefined}
-        />,
-      );
+      root!.render(<AgentImportForm onClose={() => undefined} onCreated={() => undefined} />);
     });
     return container.querySelector<HTMLInputElement>('[data-testid="agent-import-archive"]')!;
   }
@@ -304,13 +305,7 @@ describe("an item whose text looks like it contains a key", () => {
     document.body.append(container);
     root = createRoot(container);
     await act(async () => {
-      root!.render(
-        <AgentImportForm
-          onBack={() => undefined}
-          onCancel={() => undefined}
-          onCreated={() => undefined}
-        />,
-      );
+      root!.render(<AgentImportForm onClose={() => undefined} onCreated={() => undefined} />);
     });
     const reply = container.querySelector<HTMLTextAreaElement>(
       'textarea[aria-label="Paste the reply"]',
@@ -362,13 +357,7 @@ describe("an item whose text looks like it contains a key", () => {
     document.body.append(container);
     root = createRoot(container);
     await act(async () => {
-      root!.render(
-        <AgentImportForm
-          onBack={() => undefined}
-          onCancel={() => undefined}
-          onCreated={() => undefined}
-        />,
-      );
+      root!.render(<AgentImportForm onClose={() => undefined} onCreated={() => undefined} />);
     });
     const reply = container.querySelector<HTMLTextAreaElement>(
       'textarea[aria-label="Paste the reply"]',
@@ -399,61 +388,60 @@ describe("an item whose text looks like it contains a key", () => {
   });
 });
 
-describe("choosing another agent while the first is still being read", () => {
-  it("previews an initial source in Strict Mode", async () => {
-    importPreview.mockResolvedValue({ ...plan, suggestedName: "Initial" });
-    const source = {
-      paths: [".openclaw/workspace/SOUL.md"],
-      read: () => "Initial",
-      size: () => 7,
-    };
+describe("creating a bot", () => {
+  function button(label: string) {
+    return [...container!.querySelectorAll("button")].find(
+      (item) => item.textContent === label || item.getAttribute("aria-label") === label,
+    ) as HTMLButtonElement;
+  }
+
+  async function openPreview() {
+    importPreview.mockResolvedValue(plan);
+    const onClose = vi.fn();
+    const onCreated = vi.fn();
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
     await act(async () => {
-      root!.render(
-        <StrictMode>
-          <AgentImportForm
-            onBack={() => undefined}
-            onCancel={() => undefined}
-            onCreated={() => undefined}
-            initialSource={source}
-          />
-        </StrictMode>,
-      );
+      root!.render(<AgentImportForm onClose={onClose} onCreated={onCreated} />);
     });
-    expect([...container.querySelectorAll("input")].map((input) => input.value)).toContain(
-      "Initial",
-    );
+    const archive = container.querySelector<HTMLInputElement>(
+      '[data-testid="agent-import-archive"]',
+    )!;
+    const file = new File(["backup"], "backup.zip", { type: "application/zip" });
+    Object.defineProperty(file, "arrayBuffer", {
+      value: () => Promise.resolve(new Uint8Array([2]).buffer),
+    });
+    await act(async () => {
+      Object.defineProperty(archive, "files", { configurable: true, value: [file] });
+      archive.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    return { onClose, onCreated };
+  }
+
+  it("keeps the preview when Back is pressed while creation is running", async () => {
+    let finish!: (bot: Bot) => void;
+    importCreate.mockReturnValue(new Promise<Bot>((resolve) => (finish = resolve)));
+    const { onClose, onCreated } = await openPreview();
+    await act(async () => button("Create").click());
+    expect(button("Back").disabled).toBe(true);
+
+    await act(async () => button("Back").click());
+    expect(onClose).not.toHaveBeenCalled();
+    expect(container!.querySelector('[data-testid="agent-import-preview"]')).not.toBeNull();
+    expect(button("Creating…").disabled).toBe(true);
+
+    await act(async () => finish({ id: "bot-1" } as Bot));
+    expect(onCreated).toHaveBeenCalledTimes(1);
+    expect(importCreate).toHaveBeenCalledTimes(1);
   });
 
-  it("shows only the latest choice", async () => {
-    let finishFirst: (value: AgentImportPlan) => void = () => undefined;
-    importPreview
-      .mockReturnValueOnce(new Promise((resolve) => (finishFirst = resolve)))
-      .mockResolvedValueOnce({ ...plan, suggestedName: "Second" });
-    const source = (soul: string) => ({
-      paths: [".openclaw/workspace/SOUL.md"],
-      read: () => soul,
-      size: () => soul.length,
-    });
-    const form = (initialSource: ReturnType<typeof source>) => (
-      <AgentImportForm
-        onBack={() => undefined}
-        onCancel={() => undefined}
-        onCreated={() => undefined}
-        initialSource={initialSource}
-      />
-    );
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    await act(async () => root!.render(form(source("First."))));
-    await act(async () => root!.render(form(source("Second."))));
-    await act(async () => finishFirst({ ...plan, suggestedName: "First" }));
-
-    const names = [...container.querySelectorAll("input")].map((input) => input.value);
-    expect(names).toContain("Second");
-    expect(names).not.toContain("First");
+  it("lets Back leave the preview after creation fails", async () => {
+    importCreate.mockRejectedValue(new Error("nope"));
+    const { onClose } = await openPreview();
+    await act(async () => button("Create").click());
+    await act(async () => button("Back").click());
+    expect(onClose).not.toHaveBeenCalled();
+    expect(container!.querySelector('[data-testid="agent-import-preview"]')).toBeNull();
   });
 });
