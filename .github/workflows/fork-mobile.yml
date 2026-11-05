@@ -52,7 +52,9 @@ jobs:
         run: |
           missing=()
           [[ -n "$EXPO_TOKEN" ]] || missing+=("secret FORK_EXPO_TOKEN")
-          [[ -n "$EXPO_PROJECT_ID" ]] || missing+=("variable EXPO_PROJECT_ID")
+          # The project's ID, not its name: expo.dev > project > Settings shows it.
+          [[ "$EXPO_PROJECT_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] ||
+            missing+=("variable EXPO_PROJECT_ID (the project ID, like 07f7eb04-45e3-47fe-9374-99a2f991131e, not its name)")
           [[ "$API_URL" == https://* ]] || missing+=("variable RAKAZO_API_URL (https://...)")
           if (( ${#missing[@]} )); then
             printf 'Add under Settings > Secrets and variables > Actions: %s\n' "${missing[@]}" >&2
