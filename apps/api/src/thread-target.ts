@@ -32,7 +32,7 @@ import {
   runReadsThreadHistory,
 } from "@rakazo/core";
 import { deriveMessageQuote, messageReplyPreview } from "@rakazo/core/message-quote";
-import type { Prisma, PrismaClient, ThreadEvents } from "@rakazo/db";
+import type { PrismaClient, ThreadEvents } from "@rakazo/db";
 import {
   answerWaitingRunWithTextInTransaction,
   appendEventInTransaction,
@@ -45,6 +45,7 @@ import {
   IsolationError,
   loadMessageAuthor,
   lockSpaceGroup,
+  Prisma,
   primaryActiveRun,
   retireWaitingQuestionInTransaction,
   spaceIsShared,
@@ -472,6 +473,7 @@ export async function threadSnapshot(
                 ],
               },
               orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+              include: { routine: { select: { name: true } } },
             }),
             tx.run.findFirst({
               where: {
@@ -507,26 +509,7 @@ export async function threadSnapshot(
               : null;
           const currentRun = run?.status === "failed" && newestTerminal?.id !== run.id ? null : run;
           const liveRuns = activeRuns.filter((run) => run.trigger !== "bot_message");
-          const liveEvents =
-            liveRuns.length > 0
-              ? await tx.event.findMany({
-                  where: {
-                    threadId: target.threadId,
-                    runId: { in: liveRuns.map((run) => run.id) },
-                    type: {
-                      in: [
-                        "thread.progress",
-                        "thread.subagent",
-                        "run.waiting_input",
-                        "computer.takeover.requested",
-                        "agent.tool.called",
-                        "agent.tool.completed",
-                      ],
-                    },
-                  },
-                  orderBy: { seq: "asc" },
-                })
-              : [];
+          const liveEvents = await loadLiveRunEvents(tx, target.threadId, liveRuns);
           return { messagePage, last, run: currentRun, activeRuns, liveEvents, shared };
         },
         { timeout: 15_000, maxWait: 5_000 },
@@ -572,6 +555,7 @@ export async function threadSnapshot(
             ],
           },
           orderBy: { createdAt: "desc" },
+          include: { routine: { select: { name: true } } },
         }),
         // Recently updated terminals (completion bumps updatedAt). pickLatestTerminalRun then
         // ranks by completedAt ?? createdAt so null timestamps cannot revive a stale failure.
@@ -585,26 +569,7 @@ export async function threadSnapshot(
           take: 50,
         }),
       ]);
-      const liveEvents =
-        activeRuns.length > 0
-          ? await tx.event.findMany({
-              where: {
-                threadId: target.threadId,
-                runId: { in: activeRuns.map((run) => run.id) },
-                type: {
-                  in: [
-                    "thread.progress",
-                    "thread.subagent",
-                    "run.waiting_input",
-                    "computer.takeover.requested",
-                    "agent.tool.called",
-                    "agent.tool.completed",
-                  ],
-                },
-              },
-              orderBy: { seq: "asc" },
-            })
-          : [];
+      const liveEvents = await loadLiveRunEvents(tx, target.threadId, activeRuns);
       return {
         messagePage,
         last,
@@ -671,6 +636,33 @@ function pickLatestTerminalRun<T extends { id: string; createdAt: Date; complete
   });
 }
 
+type LiveRunEvent = Parameters<typeof projectMessages>[0][number];
+
+/**
+ * The events that draw a live run's progress, steps and helpers. A tool event also carries the
+ * call's arguments and result for the activity view; those are left out here, since the view
+ * reads them on demand and a long run would otherwise make every open of the thread carry them.
+ */
+async function loadLiveRunEvents(
+  tx: Pick<Prisma.TransactionClient, "$queryRaw">,
+  threadId: string,
+  runs: readonly { id: string }[],
+): Promise<LiveRunEvent[]> {
+  if (runs.length === 0) return [];
+  return tx.$queryRaw<LiveRunEvent[]>(Prisma.sql`
+    SELECT id, "threadId", "botId", "runId", type, seq, "createdAt",
+      (payload - 'input' - 'preview') AS payload
+    FROM events
+    WHERE "threadId" = ${threadId}
+      AND "runId" = ANY(${runs.map((run) => run.id)}::text[])
+      AND type IN (
+        'thread.progress', 'thread.subagent', 'run.waiting_input',
+        'computer.takeover.requested', 'agent.tool.called', 'agent.tool.completed'
+      )
+    ORDER BY seq ASC
+  `);
+}
+
 function messagesWithLiveEvents(
   persisted: ThreadSnapshot["messages"],
   liveEvents: Parameters<typeof projectMessages>[0],
@@ -699,6 +691,7 @@ function mapRun(run: {
   status: string;
   trigger: string;
   routineId: string | null;
+  routine?: { name: string } | null;
   modelProvider: string | null;
   modelId: string | null;
   error: string | null;
@@ -715,6 +708,7 @@ function mapRun(run: {
     status: run.status as never,
     trigger: run.trigger as never,
     routineId: run.routineId ?? null,
+    ...(run.routine ? { routineName: run.routine.name } : {}),
     modelProvider: run.modelProvider,
     modelId: run.modelId,
     // Same display clamp as live run.failed events so a huge stored error cannot bypass it.
@@ -1603,6 +1597,10 @@ export function isStopMessage(input: { text?: string; artifactIds?: string[] }) 
 
 export const STOPPED_BY_MESSAGE_NOTE = "Stopped. Anything already done stays done.";
 
+export function stoppedRoutineNote(routineName: string) {
+  return `Stopped the routine "${routineName}".`;
+}
+
 export async function stopThreadRuns(
   deps: {
     prisma: PrismaClient;
@@ -1639,7 +1637,15 @@ export function cancelThreadRuns(
         status: { in: [...ACTIVE_RUN_STATUSES] },
       },
       data: { status: "cancelled", completedAt: new Date() },
-      select: { id: true, botId: true, userId: true, spaceId: true },
+      select: {
+        id: true,
+        botId: true,
+        userId: true,
+        spaceId: true,
+        trigger: true,
+        routineId: true,
+        routine: { select: { name: true } },
+      },
     });
     const ids = cancelled.map((run) => run.id);
     await clearEndedRunState(tx, ids);
@@ -1695,18 +1701,36 @@ export function cancelThreadRuns(
       });
       eventSeq = event.seq;
     }
-    if (ids.length && note) {
-      const blocks: MessageBlock[] = [{ kind: "meta", text: STOPPED_BY_MESSAGE_NOTE }];
+    const named = (run: (typeof cancelled)[number]) =>
+      run.trigger === "routine" && run.routine && run.routineId ? run.routine.name : undefined;
+    const routineNotes = [
+      ...new Map(
+        cancelled.flatMap((run) => {
+          const name = named(run);
+          return name
+            ? [[run.routineId, { botId: run.botId, text: stoppedRoutineNote(name) }] as const]
+            : [];
+        }),
+      ).values(),
+    ];
+    const notes = [
+      ...routineNotes,
+      ...(note && cancelled.some((run) => !named(run))
+        ? [{ botId: note.botId, text: STOPPED_BY_MESSAGE_NOTE }]
+        : []),
+    ];
+    for (const { botId, text } of notes) {
+      const blocks: MessageBlock[] = [{ kind: "meta", text }];
       const message = await createThreadMessageInTransaction(tx, {
         threadId: target.threadId,
         role: "system",
         blocks,
-        botId: note.botId,
+        botId,
       });
       const event = await appendEventInTransaction(tx, {
         spaceId: actor.spaceId,
         threadId: target.threadId,
-        botId: note.botId,
+        botId,
         type: "thread.message.created",
         payload: { messageId: message.id, role: "system", blocks },
       });

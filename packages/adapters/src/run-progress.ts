@@ -59,6 +59,7 @@ export async function createReplyState(
     narrationSoFar: "",
     narrationStatusShowing: false,
     pendingTools: [],
+    earlyToolOutcomes: new Map(),
     pendingProgress: "",
     lastProgressAt: 0,
     hasStreamedText: false,
@@ -133,8 +134,13 @@ export function nextProgressNonce(ctx: RunContext) {
   return userProgressClientNonce(ctx.run.id, reply.midTurnProgressCount++);
 }
 
+/** Whether text written before a step may be posted as an interim message at all. */
+export function narrationBecomesMessages(ctx: RunContext) {
+  return ctx.replyMode === "chat" && runPromotesMidTurnNarration(ctx.run.trigger);
+}
+
 export function canPublishDurableNarration(ctx: RunContext) {
-  return runPromotesMidTurnNarration(ctx.run.trigger) && canPublishDurableProgress(ctx.state.reply);
+  return narrationBecomesMessages(ctx) && canPublishDurableProgress(ctx.state.reply);
 }
 
 export function flushPendingTools(reply: ReplyState) {
@@ -164,10 +170,44 @@ export function recordToolOutcome(
   durationMs: number,
 ) {
   const duration = Math.max(0, Math.round(durationMs));
+  // The call's own event is still on its way: its step takes the result when it is queued.
+  if (!queuedToolCall(reply, executionId)) {
+    reply.earlyToolOutcomes.set(executionId, { outcome, durationMs: duration });
+    return;
+  }
   reply.pendingTools = reply.pendingTools.map((call: ToolCallRef) =>
     call.executionId === executionId ? { ...call, outcome, durationMs: duration } : call,
   );
   reply.messageSegments = completeToolStep(reply.messageSegments, executionId, outcome, duration);
+}
+
+/** The call's pending ref or published step, whichever holds it now; its result once it has one. */
+export function queuedToolCall(
+  reply: Pick<ReplyState, "pendingTools" | "messageSegments">,
+  executionId: string,
+): Pick<ToolCallRef, "outcome" | "durationMs"> | undefined {
+  const pending = reply.pendingTools.find((call) => call.executionId === executionId);
+  if (pending) return pending;
+  for (const block of reply.messageSegments) {
+    if (block.kind !== "steps") continue;
+    const step = block.steps.find((item) => item.executionId === executionId);
+    if (step) return step;
+  }
+  return undefined;
+}
+
+/** The result a queued call already has, for the event that announces the call. */
+export function toolCallResultFields(
+  reply: Pick<ReplyState, "pendingTools" | "messageSegments">,
+  executionId: string,
+): Pick<ToolCallRef, "outcome" | "durationMs"> {
+  const queued = queuedToolCall(reply, executionId);
+  return queued?.outcome === undefined
+    ? {}
+    : {
+        outcome: queued.outcome,
+        ...(queued.durationMs === undefined ? {} : { durationMs: queued.durationMs }),
+      };
 }
 
 /**
@@ -237,7 +277,7 @@ export async function publishMidTurnNarration(ctx: RunContext, beforeConnectCard
   const promotes = runPromotesMidTurnNarration(run.trigger);
   if (
     text.length <= USER_PROGRESS_MESSAGE_MAX_LENGTH &&
-    (canPublishDurableNarration(ctx) || (beforeConnectCard && promotes))
+    (canPublishDurableNarration(ctx) || (beforeConnectCard && narrationBecomesMessages(ctx)))
   ) {
     reply.workingNotes.length = 0;
     reply.narrationStatusShowing = false;
@@ -275,11 +315,11 @@ export async function publishNarrationBeforeAsk(ctx: RunContext) {
   const extracted = extractNarrationText(reply.messageSegments, reply.currentTextSegment);
   const pending = redactSecretsAfter(reply.narrationSoFar, extracted.text, ctx.secrets).trim();
   reply.narrationSoFar += extracted.text;
+  // Messages mode shows only the latest text, as at the end of a turn.
+  const held =
+    ctx.replyMode === "chat" ? reply.workingNotes : pending ? [] : reply.workingNotes.slice(-1);
   // Held notes were redacted against the secrets known when they were held; check them again.
-  const text = redactSecrets(
-    [...reply.workingNotes, pending].filter(Boolean).join("\n\n"),
-    ctx.secrets,
-  );
+  const text = redactSecrets([...held, pending].filter(Boolean).join("\n\n"), ctx.secrets);
   if (!text) return;
   reply.messageSegments = extracted.remaining;
   reply.currentTextSegment = "";

@@ -54,6 +54,7 @@ import {
   toolCompletionAuditPayload,
   toolCompletionFromResult,
 } from "./tool-completion-audit.js";
+import { toolCallFailed } from "./tool-result-error.js";
 import { parseUpdateBotPatch } from "./update-bot-patch.js";
 
 const createRunExecutor = (deps: Parameters<typeof createExecutor>[0]) =>
@@ -327,8 +328,23 @@ describe("tool completion audit", () => {
     ).toBe("error");
   });
 
-  it("counts a shell command that exited nonzero as failed, but not one still running", async () => {
-    const { toolCallFailed } = await import("./tool-result-error.js");
+  it("redacts a secret inside structured results before JSON escapes it", () => {
+    const secret = 'pa"ss\\word\nline';
+    const payload = toolCompletionAuditPayload(
+      {
+        name: "read_file",
+        executionId: "r",
+        durationMs: 1,
+        result: { content: `token=${secret}`, nested: [{ note: `again ${secret}` }] },
+      },
+      [secret],
+    );
+    expect(String(payload.preview)).not.toContain("pa");
+    expect(String(payload.preview)).toContain("token=[redacted]");
+    expect(String(payload.preview)).toContain("again [redacted]");
+  });
+
+  it("counts a shell command that exited nonzero as failed, but not one still running", () => {
     expect(toolCallFailed(undefined, { stdout: "", stderr: "boom", code: 1 })).toBe(true);
     expect(toolCallFailed(undefined, { details: { stdout: "", stderr: "", code: 2 } })).toBe(true);
     expect(toolCallFailed(undefined, { stdout: "ok", stderr: "", code: 0 })).toBe(false);
@@ -1322,6 +1338,7 @@ function pinnedRoutineRunPrisma(modelId: string) {
     status: "queued",
     trigger: "routine",
     routineId: "routine-1",
+    routine: { name: "Daily check" },
     modelProvider: COMPATIBLE_PROVIDER,
     modelId,
     thinkingLevel: null,
@@ -1381,6 +1398,7 @@ async function continuePinnedRoutineRun(plaintext: string, modelId: string) {
   const runtimeRun = vi.fn();
   const enqueue = vi.fn(async () => undefined);
   const finalizeRun = vi.fn(async () => ({ continuationRunId: null }));
+  const append = vi.fn(async () => undefined);
   const executor = compatibleExecutor(
     {
       ...pinnedRoutineRunPrisma(modelId),
@@ -1391,7 +1409,7 @@ async function continuePinnedRoutineRun(plaintext: string, modelId: string) {
       runtime: { describe: () => ({ capabilities: { scripted: false } }), run: runtimeRun },
       memoryProviders: { resolve: vi.fn(async () => null) },
       memory: { read: vi.fn(async () => ({ documents: [] })) },
-      events: { append: vi.fn(async () => undefined), finalizeRun },
+      events: { append, finalizeRun },
       jobs: { enqueue },
       secrets: [],
     },
@@ -1399,7 +1417,7 @@ async function continuePinnedRoutineRun(plaintext: string, modelId: string) {
   // The fixture has no computer stack, so a run that passes model resolution
   // stops at computer setup (requeued, not finalized).
   await executor.continueRun("run-1", "worker-1").catch(() => undefined);
-  return { finalizeRun, runtimeRun, enqueue };
+  return { finalizeRun, runtimeRun, enqueue, append };
 }
 
 describe("parseUpdateBotPatch", () => {
@@ -3882,6 +3900,17 @@ description: Prepare standup notes
     );
     expect(runtimeRun).not.toHaveBeenCalled();
     expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it("names the routine when its run starts", async () => {
+    const { append } = await continuePinnedRoutineRun(compatibleSecret(), "space-model");
+
+    expect(append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "run.started",
+        payload: { trigger: "routine", routineId: "routine-1", routineName: "Daily check" },
+      }),
+    );
   });
 
   it.each([compatibleSecret(["space-model", "second-model"]), compatibleSecret()])(
