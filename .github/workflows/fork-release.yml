@@ -41,13 +41,19 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
           before="$(git rev-parse -q --verify origin/release || true)"
+          git fetch --no-tags https://github.com/elie222/rakazo.git main
+          upstream="$(git rev-parse FETCH_HEAD)"
           git checkout -B release origin/main
           for branch in $FEATURE_BRANCHES; do
-            if ! git merge --no-edit "origin/$branch"; then
-              git merge --abort
-              echo "::error::$branch conflicts with main. Merge main into $branch, fix the conflicts, and push it; release then rebuilds."
+            # main's history still holds older copies of this work, so merge against where the
+            # branch left upstream instead of the shared history.
+            base="$(git merge-base "origin/$branch" "$upstream")"
+            if ! tree="$(git merge-tree --write-tree --merge-base="$base" HEAD "origin/$branch")"; then
+              echo "$tree"
+              echo "::error::$branch conflicts with main. Merge upstream main into $branch, fix the conflicts, and push it; release then rebuilds."
               exit 1
             fi
+            git reset -q --hard "$(git commit-tree "$tree" -p HEAD -p "origin/$branch" -m "Merge $branch into release")"
           done
           if [[ -n "$before" ]] && git diff --quiet "$before" HEAD; then
             echo "Release already matches main and the feature branches."
