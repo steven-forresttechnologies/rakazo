@@ -58,7 +58,6 @@ import {
 import { recordPagePayment } from "./spending-gate.js";
 import { DESKTOP_HELD_FOR_TAKEOVER_MESSAGE } from "./takeover-resume.js";
 import { getActiveTeachingSession } from "./teaching-session.js";
-import { redactToolActivityLine } from "./tool-activity-redaction.js";
 import { vaultCardUseOf } from "./vault-card-use.js";
 
 function appendComputerCommand(ctx: RunContext, payload: ComputerCommand) {
@@ -71,10 +70,7 @@ function appendComputerCommand(ctx: RunContext, payload: ComputerCommand) {
         botId: bot.id,
         runId,
         type: "computer.command",
-        payload:
-          payload.kind === "shell" && payload.status === "done"
-            ? { ...payload, state: "tool-shell-finished" }
-            : payload,
+        payload,
       })
       // The Activity feed is a view; losing an entry must not fail the tool.
       // Output that arrives after the run was cancelled has no history to join.
@@ -399,8 +395,7 @@ export const computerTools: ToolHandlers = {
     const commandEvent = {
       executionId,
       kind: "shell" as const,
-      // Shown as the step's command line, so redacted the way its step line is.
-      command: redactToolActivityLine(command, ctx.secrets),
+      command: redactSecrets(command, ctx.secrets),
       cwd: redactSecrets(cwd ?? ".", ctx.secrets),
     };
     await appendComputerCommand(ctx, {

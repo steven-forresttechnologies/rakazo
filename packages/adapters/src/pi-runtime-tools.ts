@@ -399,7 +399,7 @@ function toAgentTool(
         // booleans to strings only after this point, past redaction, and a rejected
         // object would echo its raw value in the validation error the model sees.
         return {
-          question: typeof raw.question === "string" ? raw.question.trim() : "",
+          question: String(raw.question ?? "What should I use?"),
           ...(typeof raw.detail === "string" && raw.detail
             ? { detail: redactedAskUserDetail(raw.detail, host.request.secrets) }
             : {}),
@@ -548,12 +548,6 @@ function toAgentTool(
                 };
               }
               if (tool.name === "ask_user") {
-                const question = typeof args.question === "string" ? args.question.trim() : "";
-                if (!question || question.toLowerCase() === "placeholder") {
-                  throw new Error(
-                    "ask_user needs the actual question and answer labels to show the user.",
-                  );
-                }
                 const options = Array.isArray(args.options)
                   ? args.options.map((option) => String(option).trim())
                   : [];
@@ -569,7 +563,7 @@ function toAgentTool(
                 host.queue.push({
                   type: "ask",
                   ...(host.request.onCheckpoint ? { executionId } : {}),
-                  text: question,
+                  text: String(args.question ?? "What should I use?"),
                   ...(typeof args.detail === "string" && args.detail
                     ? { detail: args.detail }
                     : {}),

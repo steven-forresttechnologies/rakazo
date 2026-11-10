@@ -1,5 +1,5 @@
-# Fork-only: builds the Android app and publishes over-the-air updates into this fork's own
-# Expo project. It rewrites the app's identity in the runner's checkout only, so app.json stays
+# Fork-only: builds the Android app from the release branch and publishes over-the-air updates
+# into this fork's own Expo project. It rewrites the app's identity in the runner's checkout only, so app.json stays
 # identical to upstream and syncing never conflicts. Never send this file upstream.
 name: fork-mobile
 
@@ -15,13 +15,7 @@ on:
         description: "Update message (optional)"
         type: string
         required: false
-  # Every push to main that touches app code ships it to installed APKs over the air.
-  push:
-    branches: [main]
-    paths:
-      - "apps/mobile/**"
-      - "packages/**"
-      - "pnpm-lock.yaml"
+  # fork-release starts an update whenever the release branch's app code changes.
 
 permissions:
   contents: read
@@ -63,6 +57,7 @@ jobs:
 
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          ref: release
           persist-credentials: false
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -131,7 +126,7 @@ jobs:
         working-directory: apps/mobile
         env:
           EAS_NO_VCS: "1"
-          MESSAGE: ${{ github.event.inputs.message || github.event.head_commit.message || 'Update' }}
+          MESSAGE: ${{ github.event.inputs.message || 'Update' }}
         run: |
           set -euo pipefail
           eas update --platform android --channel production --environment production \

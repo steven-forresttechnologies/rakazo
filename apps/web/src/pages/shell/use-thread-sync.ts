@@ -38,7 +38,6 @@ import {
   prependThreadMessagePage,
   reduceComputerStatus,
 } from "../../lib/thread-events";
-import { recordToolCallEvent } from "../../lib/tool-call-records";
 import {
   firstVisibleTranscriptRow,
   transcriptCanSnapAfterFrame,
@@ -61,7 +60,6 @@ function applyThreadEvent(
   snapshotRef: RefObject<ThreadSnapshot | null>,
   computerRef: RefObject<ComputerStatus | null>,
 ) {
-  recordToolCallEvent(event);
   if (isThreadSnapshotEvent(event)) {
     const next = reduceThreadSnapshot(snapshotRef.current, event);
     commitSnapshot(next);

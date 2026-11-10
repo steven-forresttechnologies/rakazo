@@ -9,13 +9,8 @@ import type {
   SemanticMemoryProvider,
   WebProvider,
 } from "@rakazo/adapter-kit";
-import type {
-  ComputerMode,
-  MessageBlock,
-  ReplyMode,
-  ToolCallRef,
-  ToolStepOutcome,
-} from "@rakazo/contracts";
+import type { ComputerMode, MessageBlock, ReplyMode } from "@rakazo/contracts";
+import type { ToolStepOutcome } from "@rakazo/core";
 import { createStreamingRedactor } from "@rakazo/core";
 import { toolEffectIdempotencyKey } from "@rakazo/core/node/approval-effect-key";
 import type { Bot, Computer, effectiveMemoryScope, Run, Task, Thread } from "@rakazo/db";
@@ -123,9 +118,11 @@ export interface ReplyState {
    * Tool calls that land mid-sentence wait here until the narration catches up to a
    * sentence boundary, so the step chips never render in the middle of a clause.
    */
-  pendingTools: ToolCallRef[];
-  /** Results of calls that finished before their step was queued, applied when it is. */
-  earlyToolOutcomes: Map<string, { outcome: ToolStepOutcome; durationMs: number }>;
+  pendingToolNames: string[];
+  /** Every step label a call made, in call order, so its outcome can be saved on its step. */
+  toolCalls: { label: string; executionId: string }[];
+  /** How each finished call ended, by execution id. */
+  toolOutcomes: Map<string, ToolStepOutcome>;
   pendingProgress: string;
   lastProgressAt: number;
   hasStreamedText: boolean;

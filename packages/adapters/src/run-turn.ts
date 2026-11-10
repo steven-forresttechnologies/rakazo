@@ -30,7 +30,6 @@ import { MAX_APPROVAL_DETAIL_LENGTH, truncate } from "./approval-ask.js";
 import { isToolPauseResult } from "./approval-effect.js";
 import { returnHelperOutcome } from "./background-helpers.js";
 import { returnBotMessageOutcome } from "./bot-messages.js";
-import { USE_TOOL } from "./builtin-tool-bridge.js";
 import { scheduleComputerSleep } from "./computer-idle.js";
 import { holdComputerExecutionLeaseForTakeover } from "./computer-lifecycle.js";
 import { resolveBotWorkspacePath } from "./computer-support.js";
@@ -68,10 +67,9 @@ import {
   publishMidTurnNarration,
   publishNarrationBeforeAsk,
   recordExplicitNoResponse,
-  recordToolOutcome,
   showNarrationStatus,
-  toolCallResultFields,
   tryFlushPendingTools,
+  withReplyToolOutcomes,
 } from "./run-progress.js";
 import {
   completionMessageSegments,
@@ -92,8 +90,11 @@ import {
 } from "./silent-reply.js";
 import { isStrategicInitiativeRun } from "./strategic-initiative.js";
 import { takeoverCheckpointOf } from "./takeover-resume.js";
-import { toolActivityCallFields } from "./tool-activity-redaction.js";
-import { appendToolCompletionAudit, toolCompletionFromResult } from "./tool-completion-audit.js";
+import {
+  appendToolCompletionAudit,
+  toolCompletionFromResult,
+  toolCompletionOutcome,
+} from "./tool-completion-audit.js";
 import {
   advanceOverLimitActionCalls,
   advanceToolCallLoopGuard,
@@ -102,7 +103,6 @@ import {
   overLimitStopText,
   toolResultFingerprint,
 } from "./tool-loop.js";
-import { toolCallFailed } from "./tool-result-error.js";
 import {
   assistantTurnSeparator,
   botMessageOutcomeFromMidTurn,
@@ -515,20 +515,12 @@ async function onToolCalled(ctx: RunContext, event: RuntimeEvent<"tool">): Promi
   await flushProgress(ctx);
   // Queued first so the text written before this call becomes its note.
   const stepNames = connectorStepNames(ctx.tools.connector.get(event.name), event.args);
-  const { detail, input, command } = toolActivityCallFields(
-    event.name,
-    toolCallArgs(event),
-    ctx.secrets,
-  );
-  // A fast call can finish while the narration above flushes; its result is waiting here.
-  const early = reply.earlyToolOutcomes.get(event.executionId) ?? {};
-  reply.earlyToolOutcomes.delete(event.executionId);
-  reply.pendingTools.push(
-    ...(stepNames.length > 0 ? stepNames : [event.name]).map((name) => ({
-      name,
+  const callSteps = stepNames.length > 0 ? stepNames : [event.name];
+  reply.pendingToolNames.push(...callSteps);
+  reply.toolCalls.push(
+    ...callSteps.map((name) => ({
+      label: humanizeToolName(name),
       executionId: event.executionId,
-      ...(detail === undefined ? {} : { detail }),
-      ...early,
     })),
   );
   // Text before ask_user stays pending: the run pauses next, and the question needs it.
@@ -547,15 +539,7 @@ async function onToolCalled(ctx: RunContext, event: RuntimeEvent<"tool">): Promi
     botId: bot.id,
     type: "agent.tool.called",
     runId,
-    payload: {
-      name: event.name,
-      executionId: event.executionId,
-      ...(detail === undefined ? {} : { detail }),
-      ...(input === undefined ? {} : { input }),
-      ...(command === undefined ? {} : { command }),
-      // Read now, not above: the call may also have finished while the narration published.
-      ...toolCallResultFields(reply, event.executionId),
-    },
+    payload: { name: event.name, executionId: event.executionId },
   });
   await showNarrationStatus(ctx, heldNote);
   tryFlushPendingTools(reply);
@@ -596,33 +580,25 @@ async function onToolCalled(ctx: RunContext, event: RuntimeEvent<"tool">): Promi
       { name: event.name, executionId: event.executionId, durationMs: Date.now() - startedAt },
       result,
     );
-    if (!completion.paused) {
-      recordToolOutcome(
-        reply,
-        event.executionId,
-        toolCallFailed(completion.error, result) ? "error" : "ok",
-        completion.durationMs,
-      );
-    }
+    const outcome = toolCompletionOutcome(completion);
+    if (outcome) reply.toolOutcomes.set(event.executionId, outcome);
     await appendToolCompletionAudit(deps, audit, completion, ctx.secrets);
     return isToolPauseResult(result);
   } catch (error) {
-    const durationMs = Date.now() - startedAt;
-    recordToolOutcome(reply, event.executionId, "error", durationMs);
+    reply.toolOutcomes.set(event.executionId, "failed");
     await appendToolCompletionAudit(
       deps,
       audit,
-      { name: event.name, executionId: event.executionId, durationMs, error },
+      {
+        name: event.name,
+        executionId: event.executionId,
+        durationMs: Date.now() - startedAt,
+        error,
+      },
       ctx.secrets,
     );
     throw error;
   }
-}
-
-/** The arguments the call is about: a deferred tool's own, when reached through use_tool. */
-function toolCallArgs(event: RuntimeEvent<"tool">): unknown {
-  const inner = event.name === USE_TOOL ? event.args.arguments : undefined;
-  return inner && typeof inner === "object" ? inner : event.args;
 }
 
 /** The model keeps repeating the same call: finish the run with what it has and say why. */
@@ -634,6 +610,8 @@ async function stopStuckToolLoop(ctx: RunContext, toolName: string) {
   ctx.runtimeAbortController.abort();
   ctx.tools.approvedReplays.assertDrained();
   flushPendingTools(reply);
+  // Calls that had not finished when the loop was stopped never ran to the end.
+  reply.messageSegments = withReplyToolOutcomes(reply, "stopped");
   if (!(await renewRunLease(deps, runId, workerId, fence))) return;
   if (reply.messageSegments.length > 0) {
     await publishMessage(deps, run, "bot", redactBlocks(reply.messageSegments, ctx.secrets));
@@ -839,6 +817,7 @@ export async function completeRun(ctx: RunContext) {
     reply.currentTextSegment = reply.assembled;
   }
   flushPendingTools(reply);
+  reply.messageSegments = withReplyToolOutcomes(reply);
   // Silent-allowed runs can choose an explicit NO_RESPONSE or finish empty.
   // Other runs still drop a stray sentinel at the edges of a real reply.
   // A member a group message named nobody for may end silently with the sentinel, a placeholder

@@ -96,11 +96,6 @@ import { useSideInsets } from "../../lib/side-insets";
 import { continueWithSso } from "../../lib/sso";
 import { openStoreListing, useStoreUpdateAvailable } from "../../lib/store-update";
 import {
-  getCachedToolActivityEnabled,
-  setToolActivityPreference,
-  subscribeToolActivity,
-} from "../../lib/tool-activity-preference";
-import {
   loadTrustedLinkSites,
   removeTrustedLinkSite,
   useTrustedLinkSites,
@@ -188,11 +183,6 @@ export default function Account() {
   const streamReplies = useSyncExternalStore(
     subscribeResponseStreaming,
     getCachedResponseStreamingEnabled,
-    () => false,
-  );
-  const showToolActivity = useSyncExternalStore(
-    subscribeToolActivity,
-    getCachedToolActivityEnabled,
     () => false,
   );
   const loadRemoteImages = useSyncExternalStore(
@@ -812,13 +802,6 @@ export default function Account() {
               label={t("Stream replies")}
               value={streamReplies}
               onChange={(checked) => void setResponseStreamingPreference(checked ? "on" : "off")}
-            />
-          ) : null}
-          {advancedOpen ? (
-            <SettingsSwitch
-              label={t("Show tool activity")}
-              value={showToolActivity}
-              onChange={(checked) => void setToolActivityPreference(checked ? "on" : "off")}
             />
           ) : null}
           {advancedOpen ? (

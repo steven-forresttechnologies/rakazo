@@ -5,7 +5,7 @@ import type * as MessageQuoteModule from "@rakazo/core/message-quote";
 import type { PrismaClient } from "@rakazo/db";
 import { describe, expect, it, vi } from "vitest";
 import { reactToThreadMessage } from "./thread-reactions.js";
-import { loadLiveRunEvents, threadSnapshot } from "./thread-snapshot.js";
+import { threadSnapshot } from "./thread-snapshot.js";
 import { stopThreadRuns } from "./thread-stop.js";
 import type { ThreadTarget } from "./thread-target.js";
 import {
@@ -5216,34 +5216,5 @@ describe("latestWaitingRun", () => {
     const tied = [run("x", "waiting_input", 3), run("y", "waiting_input", 3)];
     expect(latestWaitingRun(tied)?.id).toBe("y");
     expect(latestWaitingRun([...tied].reverse())?.id).toBe("y");
-  });
-});
-
-describe("loadLiveRunEvents", () => {
-  it("reads through the client and leaves a call's arguments and result out", async () => {
-    const findMany = vi.fn().mockResolvedValue([
-      {
-        id: "e1",
-        type: "agent.tool.called",
-        payload: { name: "shell", input: "{}", detail: "ls", command: "ls" },
-      },
-      { id: "e2", type: "agent.tool.completed", payload: { executionId: "x1", preview: "secret" } },
-      { id: "e3", type: "thread.progress", payload: { text: "Hi", input: "kept" } },
-    ]);
-    const events = await loadLiveRunEvents({ event: { findMany } } as never, "thread-1", [
-      { id: "run-1" },
-    ]);
-    expect(events.map((event) => event.payload)).toEqual([
-      { name: "shell", detail: "ls", command: "ls" },
-      { executionId: "x1" },
-      { text: "Hi", input: "kept" },
-    ]);
-    expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ runId: { in: ["run-1"] } }) }),
-    );
-    await expect(
-      loadLiveRunEvents({ event: { findMany } } as never, "thread-1", []),
-    ).resolves.toEqual([]);
-    expect(findMany).toHaveBeenCalledOnce();
   });
 });

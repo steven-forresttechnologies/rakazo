@@ -6,10 +6,9 @@ import {
   projectMessageReactions,
   shouldShowBotSenderName,
 } from "@rakazo/core";
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useState } from "react";
 import { applyLocalChoiceDismissals, hasVisibleMessagePresentation } from "./message-presentation";
 import type { MobileMessage } from "./mobile-types";
-import { getCachedToolActivityEnabled, subscribeToolActivity } from "./tool-activity-preference";
 
 /**
  * What the chat draws from its messages: peer replies folded under their marker until expanded,
@@ -22,11 +21,6 @@ export function useThreadTranscript(messages: MobileMessage[] | undefined, inGro
   >(() => new Map());
   const [expandedPeerMarkers, setExpandedPeerMarkers] = useState<ReadonlySet<string>>(
     () => new Set(),
-  );
-  const showToolActivity = useSyncExternalStore(
-    subscribeToolActivity,
-    getCachedToolActivityEnabled,
-    () => false,
   );
   const showBotSenderName = useMemo(
     () =>
@@ -51,14 +45,14 @@ export function useThreadTranscript(messages: MobileMessage[] | undefined, inGro
           const blocks = applyLocalChoiceDismissals(message.blocks, dismissed);
           return blocks === message.blocks ? message : { ...message, blocks: [...blocks] };
         })
-        .filter((message) => hasVisibleMessagePresentation(message.blocks, showToolActivity)),
+        .filter((message) => hasVisibleMessagePresentation(message.blocks)),
     );
     return {
       ...projectMessageReactions(mentionView.visibleMessages),
       mentions: mentionView.mentions,
       foldedInto: mentionView.foldedInto,
     };
-  }, [dismissedChoiceQuestions, expandedPeerMarkers, peerTranscript, showToolActivity]);
+  }, [dismissedChoiceQuestions, expandedPeerMarkers, peerTranscript]);
 
   function dismissChoice(messageId: string, question: string) {
     setDismissedChoiceQuestions((current) => {

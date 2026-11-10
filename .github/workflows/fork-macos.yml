@@ -1,4 +1,4 @@
-# This workflow builds a separate local-install app for the fork.
+# Fork-only: builds a separate local-install macOS app from the release branch.
 name: fork-macos
 
 on:
@@ -15,6 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          ref: release
           persist-credentials: false
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6

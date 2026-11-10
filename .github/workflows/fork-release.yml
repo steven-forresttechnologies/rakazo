@@ -1,0 +1,66 @@
+# Fork-only: rebuilds the release branch from main plus the fork's feature branches. Release is
+# what this fork's apps and CapRover server run. main stays upstream plus fork-only files that
+# upstream never touches, so GitHub's Sync fork button keeps working. Never send this upstream.
+name: fork-release
+
+on:
+  # Sync fork pushes to main. Pushes to a feature branch never reach this file, so the schedule
+  # (or Run workflow) picks those up.
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
+
+env:
+  # Space-separated branches merged on top of main, in order.
+  FEATURE_BRANCHES: claude/agent-command-visibility-muro28
+
+jobs:
+  release:
+    if: github.repository != 'elie222/rakazo'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Merge main with the feature branches
+        id: merge
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          before="$(git rev-parse -q --verify origin/release || true)"
+          git checkout -B release origin/main
+          for branch in $FEATURE_BRANCHES; do
+            if ! git merge --no-edit "origin/$branch"; then
+              git merge --abort
+              echo "::error::$branch conflicts with main. Merge main into $branch, fix the conflicts, and push it; release then rebuilds."
+              exit 1
+            fi
+          done
+          if [[ -n "$before" ]] && git diff --quiet "$before" HEAD; then
+            echo "Release already matches main and the feature branches."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git push --force origin release
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          if [[ -z "$before" ]] || ! git diff --quiet "$before" HEAD -- apps/mobile packages pnpm-lock.yaml; then
+            echo "mobile=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Ship the app update over the air
+        if: steps.merge.outputs.mobile == 'true' && vars.EXPO_PROJECT_ID != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run fork-mobile.yml --ref main -f action=update -f message="$(git log -1 --format=%s origin/main)"

@@ -8,12 +8,7 @@ import type {
   ThreadMessage,
 } from "@rakazo/contracts";
 import type { ChildBotBlock, PeerExchange } from "@rakazo/core";
-import {
-  isPeerReceiptBlocks,
-  isToolActivityBlock,
-  LIVE_TOOL_STEP_WINDOW,
-  otherAuthor,
-} from "@rakazo/core";
+import { isPeerReceiptBlocks, isToolActivityBlock, otherAuthor } from "@rakazo/core";
 import { BotAvatar, Button, cn, resolvePersonaColorDef } from "@rakazo/ui-web";
 import { UserRound } from "lucide-react";
 import { memo, useCallback, useMemo } from "react";
@@ -25,11 +20,11 @@ import { McpAppCard } from "../../components/McpAppCard";
 import { PageBlockCard } from "../../components/pages/PageBlockCard";
 import { SubagentCard } from "../../components/SubagentCard";
 import {
+  LIVE_TOOL_STEP_WINDOW,
   StandaloneToolActivity,
   ToolActivityDisclosure,
   ToolOnlyNarration,
   ToolSteps,
-  toolStepSource,
 } from "../../components/ToolActivityDisclosure";
 import { SkillDraftCard } from "../../components/teach/SkillDraftCard";
 import type { ArtifactTarget } from "../../lib/artifact-open";
@@ -252,7 +247,6 @@ export const MessageView = memo(function MessageView({
       onReact={onReact}
     />
   );
-  const hasToolCard = visibleNarrationBlocks.some((block) => block.kind === "steps");
   if (isNarration) {
     if (visibleNarrationBlocks.length === 0) return null;
     if (isToolOnlyNarration(message.blocks, showToolActivity)) {
@@ -260,7 +254,7 @@ export const MessageView = memo(function MessageView({
         <>
           {messageContext}
           <div className="relative">
-            <ToolOnlyNarration blocks={visibleNarrationBlocks} live={isLive} message={message} />
+            <ToolOnlyNarration blocks={visibleNarrationBlocks} live={isLive} />
             {hoverActions}
           </div>
         </>
@@ -269,25 +263,11 @@ export const MessageView = memo(function MessageView({
     return (
       <>
         {messageContext}
-        <div
-          className={cn(
-            "relative w-fit max-w-full [@media(hover:none)]:w-full",
-            hasToolCard && "w-full",
-          )}
-        >
-          <div
-            className={cn(
-              "flex w-fit max-w-full justify-start [@media(hover:none)]:w-full",
-              hasToolCard && "w-full",
-            )}
-          >
+        <div className="relative w-fit max-w-full [@media(hover:none)]:w-full">
+          <div className="flex w-fit max-w-full justify-start [@media(hover:none)]:w-full">
             <div
               data-testid="message-bot-bubble"
-              className={cn(
-                "max-w-full space-y-2.5 rounded-2xl bg-muted px-[18px] py-3 text-body-lg text-foreground",
-                // A tool card's rows and code blocks need the room the row allows, not the reply's width.
-                hasToolCard && "w-full",
-              )}
+              className="max-w-full space-y-2.5 rounded-2xl bg-muted px-[18px] py-3 text-body-lg text-foreground"
               dir="auto"
             >
               {visibleNarrationBlocks.map((block, i) => {
@@ -298,13 +278,11 @@ export const MessageView = memo(function MessageView({
                       live={isLive}
                       stepCount={toolStepCount(block.steps)}
                       durationMs={block.durationMs}
-                      startedAt={message.createdAt}
                     >
                       <ToolSteps
                         steps={block.steps}
-                        live={isLive}
+                        currentIndex={isLive ? block.steps.length - 1 : undefined}
                         limit={isLive ? LIVE_TOOL_STEP_WINDOW : undefined}
-                        source={toolStepSource(message)}
                       />
                     </ToolActivityDisclosure>
                   );
@@ -366,8 +344,6 @@ export const MessageView = memo(function MessageView({
                 steps={block.steps}
                 stepCount={toolStepCount(block.steps)}
                 durationMs={block.durationMs}
-                startedAt={message.createdAt}
-                source={toolStepSource(message)}
               />
             );
           }

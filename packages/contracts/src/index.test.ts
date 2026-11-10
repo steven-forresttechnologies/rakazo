@@ -17,7 +17,6 @@ import {
   ReorderBotsInput,
   RunActivityRowSchema,
   RunSchema,
-  TOOL_STEP_DETAIL_MAX_CHARS,
   UpdateBotInput,
   UpdateGroupInput,
   usableModelId,
@@ -217,31 +216,11 @@ describe("contracts", () => {
     );
   });
 
-  it("keeps a call's detail and outcome on a step and bounds the detail", () => {
-    const steps = [
-      {
-        label: "Shell",
-        count: 1,
-        executionId: "x1",
-        detail: "ls -la",
-        outcome: "ok",
-        durationMs: 120,
-      },
-      { label: "Shell", count: 1, executionId: "x2", detail: "cat missing", outcome: "error" },
-    ];
-    expect(MessageBlock.parse({ kind: "steps", steps })).toEqual({ kind: "steps", steps });
-    expect(
-      MessageBlock.safeParse({
-        kind: "steps",
-        steps: [{ label: "Shell", count: 1, detail: "x".repeat(TOOL_STEP_DETAIL_MAX_CHARS + 1) }],
-      }).success,
-    ).toBe(false);
-  });
-
-  it("keeps a note on a step and still reads steps saved without one", () => {
+  it("keeps a step's note and outcomes and still reads steps saved without them", () => {
     const steps = [
       { label: "Read file", count: 1, note: "The meeting is with Anna." },
-      { label: "Save", count: 1 },
+      { label: "Save", count: 2, outcomes: { succeeded: 1, failed: 1 } },
+      { label: "Shell", count: 1 },
     ];
     expect(MessageBlock.parse({ kind: "steps", steps })).toEqual({ kind: "steps", steps });
   });
