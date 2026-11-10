@@ -106,6 +106,50 @@ export const BotSettingsValuesSchema = z.object({
 });
 export type BotSettingsValues = z.infer<typeof BotSettingsValuesSchema>;
 
+/** Longest one-line description of a tool call's arguments kept on its step. */
+export const TOOL_STEP_DETAIL_MAX_CHARS = 200;
+/** Longest tool result text kept on its completion event for the activity view. */
+export const TOOL_RESULT_PREVIEW_MAX_CHARS = 4_000;
+
+/** How one call ended, as the live activity view shows it. */
+export const ToolCallOutcome = z.enum(["ok", "error"]);
+export type ToolCallOutcome = z.infer<typeof ToolCallOutcome>;
+
+/** One tool call as the live view first hears of it. */
+export const ToolCallRefSchema = z.object({
+  name: z.string(),
+  executionId: z.string().optional(),
+  /** The call's main argument on one line: the command, path, query or similar. */
+  detail: z.string().max(TOOL_STEP_DETAIL_MAX_CHARS).optional(),
+  /** Set when the call finished before its step could show. */
+  outcome: ToolCallOutcome.optional(),
+  durationMs: z.number().int().nonnegative().optional(),
+});
+export type ToolCallRef = z.infer<typeof ToolCallRefSchema>;
+
+/** A row in a reply's tool activity: one call, or a run of identical calls. */
+export const ToolStepSchema = z.object({
+  label: z.string(),
+  count: z.number().int().positive(),
+  /** What the bot wrote just before this step, kept out of its reply. */
+  note: z.string().optional(),
+  /** The newest call behind this row, for its result and output. */
+  executionId: z.string().optional(),
+  detail: z.string().max(TOOL_STEP_DETAIL_MAX_CHARS).optional(),
+  /** Absent while the call runs or when the run ended before it finished. */
+  outcome: ToolCallOutcome.optional(),
+  durationMs: z.number().int().nonnegative().optional(),
+  /** How many of this step's calls succeeded, failed, or were stopped before finishing. */
+  outcomes: z
+    .object({
+      succeeded: z.number().int().positive().optional(),
+      failed: z.number().int().positive().optional(),
+      stopped: z.number().int().positive().optional(),
+    })
+    .optional(),
+});
+export type ToolStep = z.infer<typeof ToolStepSchema>;
+
 /** A payment's order as read from the page: every value is page text, none of it checked. */
 export const AskReceipt = z.object({
   /** The pay button's label. */
@@ -241,26 +285,12 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     text: z.string(),
     /** Provider-generated tool status rather than assistant-authored narration. */
     activity: z.literal(true).optional(),
-    pendingToolNames: z.array(z.string()).optional(),
+    /** Calls waiting for the narration to reach a sentence boundary before they show as steps. */
+    pendingTools: z.array(ToolCallRefSchema).optional(),
   }),
   z.object({
     kind: z.literal("steps"),
-    steps: z.array(
-      z.object({
-        label: z.string(),
-        count: z.number().int().positive(),
-        /** What the bot wrote just before this step, kept out of its reply. */
-        note: z.string().optional(),
-        /** How many of this step's calls succeeded, failed, or were stopped before finishing. */
-        outcomes: z
-          .object({
-            succeeded: z.number().int().positive().optional(),
-            failed: z.number().int().positive().optional(),
-            stopped: z.number().int().positive().optional(),
-          })
-          .optional(),
-      }),
-    ),
+    steps: z.array(ToolStepSchema),
     durationMs: z.number().int().nonnegative().optional(),
   }),
   z.object({
@@ -443,6 +473,29 @@ export function foldComputerCommands<T extends ComputerCommand>(events: T[]): T[
   }
   return [...byId.values()];
 }
+
+/**
+ * What one tool call did, folded from its completion event and any shell output it streamed:
+ * the activity view reads these on demand instead of carrying them in the message.
+ */
+export const ToolCallRecordSchema = z.object({
+  executionId: z.string(),
+  name: z.string(),
+  status: z.enum(["running", "done"]),
+  outcome: z.enum(["succeeded", "error", "paused"]).optional(),
+  durationMs: z.number().int().nonnegative().optional(),
+  error: z.string().optional(),
+  /** The full shell command, when the call ran one. */
+  command: z.string().optional(),
+  /** The call's arguments as redacted, bounded JSON; absent for a shell command, whose text is `command`. */
+  input: z.string().optional(),
+  /** Redacted text the tool returned, or the shell's output tail while and after it runs. */
+  output: z.string().optional(),
+  exitCode: z.number().int().nullable().optional(),
+  /** The call's arguments, result and error are only shown to the person who started the run. */
+  withheld: z.literal(true).optional(),
+});
+export type ToolCallRecord = z.infer<typeof ToolCallRecordSchema>;
 
 /** Coarse live run state. Never accepts provider reasoning content or partial messages. */
 export const ThreadActivityPayloadSchema = z

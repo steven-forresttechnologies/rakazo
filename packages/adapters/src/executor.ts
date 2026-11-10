@@ -162,7 +162,7 @@ import {
   runtimeFallbackModel,
 } from "./run-model.js";
 import { runModelBackups, startRunModel } from "./run-model-start.js";
-import { createReplyState } from "./run-progress.js";
+import { createReplyState, recordToolOutcome } from "./run-progress.js";
 import {
   DELEGATED_EMPTY_NOTICE,
   GROUP_UNADDRESSED_REPLY_GUIDANCE,
@@ -223,6 +223,7 @@ import {
 import { loadAgentTicketContext } from "./ticket-context.js";
 import { appendToolCompletionAudit, toolCompletionOutcome } from "./tool-completion-audit.js";
 import { toolResultFingerprint } from "./tool-loop.js";
+import { toolCallFailed } from "./tool-result-error.js";
 import { restoreTurnCheckpoint } from "./turn-checkpoint.js";
 import { createWebProvider } from "./web-provider-factory.js";
 
@@ -1927,6 +1928,14 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                   effects.restoredPending = undefined;
                 if (!completion.paused)
                   effects.pendingTurnCheckpoints.delete(completion.executionId);
+                if (!completion.paused) {
+                  recordToolOutcome(
+                    state.reply,
+                    completion.executionId,
+                    toolCallFailed(completion.error, completion.result) ? "error" : "ok",
+                    completion.durationMs,
+                  );
+                }
                 const outcome = toolCompletionOutcome(completion);
                 if (outcome) state.reply.toolOutcomes.set(completion.executionId, outcome);
                 const audited = appendToolCompletionAudit(

@@ -11,6 +11,8 @@ import {
   isBackgroundInputBlock,
   isBackgroundRunTrigger,
   isPeerReceiptBlocks,
+  isVisualActionTool,
+  withoutPrivateStepDetails,
 } from "@rakazo/core";
 import { messageReplyPreview } from "@rakazo/core/message-quote";
 import type { Prisma, PrismaClient } from "@rakazo/db";
@@ -181,6 +183,76 @@ export async function isPeerRun(
   return peerRun;
 }
 
+/**
+ * Whether a run was started by someone other than this viewer. A tool call's arguments and
+ * result can carry that person's own data, so only they see it; others see the step itself.
+ */
+export async function isOthersRun(
+  prisma: MessageDb,
+  runId: string | undefined,
+  userId: string,
+  cache: Map<string, Promise<boolean>>,
+): Promise<boolean> {
+  if (!runId) return false;
+  let others = cache.get(runId);
+  if (!others) {
+    others = prisma.run
+      .findUnique({ where: { id: runId }, select: { userId: true } })
+      .then((run) => run?.userId !== userId);
+    cache.set(runId, others);
+  }
+  return others;
+}
+
+/**
+ * A tool event without the call's arguments, result and error text, for a viewer who did not
+ * start the run. It says so, so the view does not read the gap as a call that printed nothing.
+ */
+export function withoutToolCallContent<E extends { type: string; payload: unknown }>(event: E): E {
+  if (event.type !== "agent.tool.called" && event.type !== "agent.tool.completed") return event;
+  if (!event.payload || typeof event.payload !== "object") return event;
+  const {
+    input: _input,
+    preview: _preview,
+    error: _error,
+    detail,
+    ...payload
+  } = event.payload as Record<string, unknown>;
+  return {
+    ...event,
+    payload: {
+      ...payload,
+      ...(typeof payload.command === "string" ? { detail } : {}),
+      withheld: true,
+    },
+  };
+}
+
+export function withoutPrivateToolDetails<E extends { type: string; payload: unknown }>(
+  event: E,
+): E {
+  if (!event.payload || typeof event.payload !== "object") return event;
+  const payload = event.payload as Record<string, unknown>;
+  if (event.type === "thread.message.created" || event.type === "thread.message.updated") {
+    if (!Array.isArray(payload.blocks)) return event;
+    return { ...event, payload: { ...payload, blocks: withoutPrivateStepDetails(payload.blocks) } };
+  }
+  if (event.type !== "agent.tool.called" && event.type !== "agent.tool.completed") return event;
+  if (typeof payload.name === "string" && isVisualActionTool(payload.name)) {
+    const { detail: _detail, input: _input, preview: _preview, error: _error, ...safe } = payload;
+    return { ...event, payload: safe };
+  }
+  if (
+    event.type === "agent.tool.called" &&
+    typeof payload.command !== "string" &&
+    payload.detail !== undefined
+  ) {
+    const { detail: _detail, ...safe } = payload;
+    return { ...event, payload: safe };
+  }
+  return event;
+}
+
 export async function isBackgroundRun(
   prisma: MessageDb,
   runId: string | undefined,
@@ -311,7 +383,7 @@ function toThreadMessage(row: MessageRow, authors: Map<string, MessageAuthor>): 
     threadId: row.threadId,
     seq: row.seq,
     role: row.role as ThreadMessage["role"],
-    blocks: row.blocks as ThreadMessage["blocks"],
+    blocks: withoutPrivateStepDetails(row.blocks as ThreadMessage["blocks"]),
     botId: row.botId ?? undefined,
     ...(author ? { author } : {}),
     replyToMessageId: row.replyToMessageId ?? undefined,

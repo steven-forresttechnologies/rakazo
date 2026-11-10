@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { SandboxProvider } from "@rakazo/adapter-kit";
 import type { ComputerCommand } from "@rakazo/contracts";
 import { COMPUTER_COMMAND_OUTPUT_MAX_CHARS } from "@rakazo/contracts";
-import { redactSecrets, sandboxCommandTimeoutMs } from "@rakazo/core";
+import { redactSecrets, sandboxCommandTimeoutMs, toolShellFinishedState } from "@rakazo/core";
 import { RunHistoryWriteError, releasePayment } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 import { redactShellStreams } from "./agent-environment.js";
@@ -58,6 +58,7 @@ import {
 import { recordPagePayment } from "./spending-gate.js";
 import { DESKTOP_HELD_FOR_TAKEOVER_MESSAGE } from "./takeover-resume.js";
 import { getActiveTeachingSession } from "./teaching-session.js";
+import { redactToolActivityLine } from "./tool-activity-redaction.js";
 import { vaultCardUseOf } from "./vault-card-use.js";
 
 function appendComputerCommand(ctx: RunContext, payload: ComputerCommand) {
@@ -70,7 +71,10 @@ function appendComputerCommand(ctx: RunContext, payload: ComputerCommand) {
         botId: bot.id,
         runId,
         type: "computer.command",
-        payload,
+        payload:
+          payload.kind === "shell" && payload.status === "done"
+            ? { ...payload, state: toolShellFinishedState(payload.executionId) }
+            : payload,
       })
       // The Activity feed is a view; losing an entry must not fail the tool.
       // Output that arrives after the run was cancelled has no history to join.
@@ -395,7 +399,8 @@ export const computerTools: ToolHandlers = {
     const commandEvent = {
       executionId,
       kind: "shell" as const,
-      command: redactSecrets(command, ctx.secrets),
+      // Shown as the step's command line, so redacted the way its step line is.
+      command: redactToolActivityLine(command, ctx.secrets),
       cwd: redactSecrets(cwd ?? ".", ctx.secrets),
     };
     await appendComputerCommand(ctx, {

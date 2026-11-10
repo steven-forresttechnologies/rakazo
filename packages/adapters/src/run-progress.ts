@@ -1,9 +1,10 @@
 import { messagingProgressJob } from "@rakazo/adapter-kit";
-import type { MessageBlock } from "@rakazo/contracts";
+import type { MessageBlock, ToolCallOutcome, ToolCallRef } from "@rakazo/contracts";
 import type { ToolStepOutcome } from "@rakazo/core";
 import {
   appendTextSegment,
   appendToolCallSegment,
+  completeToolStep,
   createStreamingRedactor,
   endsSentence,
   isBackgroundRunTrigger,
@@ -65,7 +66,8 @@ export async function createReplyState(
     textSinceLastStep: "",
     narrationSoFar: "",
     narrationStatusShowing: false,
-    pendingToolNames: [],
+    pendingTools: [],
+    earlyToolOutcomes: new Map(),
     toolCalls: [],
     toolOutcomes: new Map(),
     pendingProgress: "",
@@ -176,10 +178,10 @@ export function flushPendingTools(reply: ReplyState) {
     reply.messageSegments = appendTextSegment(reply.messageSegments, reply.currentTextSegment);
     reply.currentTextSegment = "";
   }
-  for (const name of reply.pendingToolNames) {
-    reply.messageSegments = appendToolCallSegment(reply.messageSegments, name);
+  for (const call of reply.pendingTools) {
+    reply.messageSegments = appendToolCallSegment(reply.messageSegments, call);
   }
-  reply.pendingToolNames = [];
+  reply.pendingTools = [];
 }
 
 /**
@@ -200,8 +202,60 @@ export function withReplyToolOutcomes(
 }
 
 export function tryFlushPendingTools(reply: ReplyState) {
-  if (reply.pendingToolNames.length > 0 && endsSentence(reply.currentTextSegment))
+  if (reply.pendingTools.length > 0 && endsSentence(reply.currentTextSegment))
     flushPendingTools(reply);
+}
+
+/**
+ * A finished call marks its step, or the pending call still waiting to become one. A call whose
+ * step was already published in an interim message keeps showing as it was.
+ */
+export function recordToolOutcome(
+  reply: ReplyState,
+  executionId: string,
+  outcome: ToolCallOutcome,
+  durationMs: number,
+) {
+  const duration = Math.max(0, Math.round(durationMs));
+  // The call's own event is still on its way: its step takes the result when it is queued.
+  const result = { outcome, durationMs: duration };
+  if (!queuedToolCall(reply, executionId)) {
+    reply.earlyToolOutcomes.set(executionId, result);
+    return;
+  }
+  reply.pendingTools = reply.pendingTools.map((call: ToolCallRef) =>
+    call.executionId === executionId ? { ...call, ...result } : call,
+  );
+  reply.messageSegments = completeToolStep(reply.messageSegments, executionId, outcome, duration);
+}
+
+/** The call's pending ref or published step, whichever holds it now; its result once it has one. */
+export function queuedToolCall(
+  reply: Pick<ReplyState, "pendingTools" | "messageSegments">,
+  executionId: string,
+): Pick<ToolCallRef, "outcome" | "durationMs"> | undefined {
+  const pending = reply.pendingTools.find((call) => call.executionId === executionId);
+  if (pending) return pending;
+  for (const block of reply.messageSegments) {
+    if (block.kind !== "steps") continue;
+    const step = block.steps.find((item) => item.executionId === executionId);
+    if (step) return step;
+  }
+  return undefined;
+}
+
+/** The result a queued call already has, for the event that announces the call. */
+export function toolCallResultFields(
+  reply: Pick<ReplyState, "pendingTools" | "messageSegments">,
+  executionId: string,
+): Pick<ToolCallRef, "outcome" | "durationMs"> {
+  const queued = queuedToolCall(reply, executionId);
+  return queued?.outcome === undefined
+    ? {}
+    : {
+        outcome: queued.outcome,
+        ...(queued.durationMs === undefined ? {} : { durationMs: queued.durationMs }),
+      };
 }
 
 /**
