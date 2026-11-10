@@ -1371,7 +1371,7 @@ describe("toolCompletedUpdate", () => {
   });
 });
 
-describe("projectMessages tool results", () => {
+describe("projectMessages late tool results", () => {
   it("marks the step without moving the live row", () => {
     const [live] = projectMessages([
       {

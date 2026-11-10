@@ -1,9 +1,4 @@
-import type {
-  MessageBlock,
-  ThreadMessage,
-  ToolCallOutcome,
-  ToolCallRef,
-} from "@rakazo/contracts";
+import type { MessageBlock, ThreadMessage, ToolCallOutcome, ToolCallRef } from "@rakazo/contracts";
 import { TOOL_STEP_DETAIL_MAX_CHARS } from "@rakazo/contracts";
 import { cloudAgentBlockFromPayload } from "./cloud-agent.js";
 import { preserveIdentitySource } from "./identity-source.js";
