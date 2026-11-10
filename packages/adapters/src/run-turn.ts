@@ -72,6 +72,7 @@ import {
   showNarrationStatus,
   toolCallResultFields,
   tryFlushPendingTools,
+  withReplyToolOutcomes,
 } from "./run-progress.js";
 import {
   completionMessageSegments,
@@ -93,7 +94,11 @@ import {
 import { isStrategicInitiativeRun } from "./strategic-initiative.js";
 import { takeoverCheckpointOf } from "./takeover-resume.js";
 import { toolActivityCallFields } from "./tool-activity-redaction.js";
-import { appendToolCompletionAudit, toolCompletionFromResult } from "./tool-completion-audit.js";
+import {
+  appendToolCompletionAudit,
+  toolCompletionFromResult,
+  toolCompletionOutcome,
+} from "./tool-completion-audit.js";
 import {
   advanceOverLimitActionCalls,
   advanceToolCallLoopGuard,
@@ -523,8 +528,12 @@ async function onToolCalled(ctx: RunContext, event: RuntimeEvent<"tool">): Promi
   // A fast call can finish while the narration above flushes; its result is waiting here.
   const early = reply.earlyToolOutcomes.get(event.executionId) ?? {};
   reply.earlyToolOutcomes.delete(event.executionId);
+  const callSteps = stepNames.length > 0 ? stepNames : [event.name];
+  reply.toolCalls.push(
+    ...callSteps.map((name) => ({ label: humanizeToolName(name), executionId: event.executionId })),
+  );
   reply.pendingTools.push(
-    ...(stepNames.length > 0 ? stepNames : [event.name]).map((name) => ({
+    ...callSteps.map((name) => ({
       name,
       executionId: event.executionId,
       ...(detail === undefined ? {} : { detail }),
@@ -604,11 +613,14 @@ async function onToolCalled(ctx: RunContext, event: RuntimeEvent<"tool">): Promi
         completion.durationMs,
       );
     }
+    const outcome = toolCompletionOutcome(completion);
+    if (outcome) reply.toolOutcomes.set(event.executionId, outcome);
     await appendToolCompletionAudit(deps, audit, completion, ctx.secrets);
     return isToolPauseResult(result);
   } catch (error) {
     const durationMs = Date.now() - startedAt;
     recordToolOutcome(reply, event.executionId, "error", durationMs);
+    reply.toolOutcomes.set(event.executionId, "failed");
     await appendToolCompletionAudit(
       deps,
       audit,
@@ -634,6 +646,8 @@ async function stopStuckToolLoop(ctx: RunContext, toolName: string) {
   ctx.runtimeAbortController.abort();
   ctx.tools.approvedReplays.assertDrained();
   flushPendingTools(reply);
+  // Calls that had not finished when the loop was stopped never ran to the end.
+  reply.messageSegments = withReplyToolOutcomes(reply, "stopped");
   if (!(await renewRunLease(deps, runId, workerId, fence))) return;
   if (reply.messageSegments.length > 0) {
     await publishMessage(deps, run, "bot", redactBlocks(reply.messageSegments, ctx.secrets));
@@ -839,6 +853,7 @@ export async function completeRun(ctx: RunContext) {
     reply.currentTextSegment = reply.assembled;
   }
   flushPendingTools(reply);
+  reply.messageSegments = withReplyToolOutcomes(reply);
   // Silent-allowed runs can choose an explicit NO_RESPONSE or finish empty.
   // Other runs still drop a stray sentinel at the edges of a real reply.
   // A member a group message named nobody for may end silently with the sentinel, a placeholder

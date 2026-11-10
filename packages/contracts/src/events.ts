@@ -111,8 +111,9 @@ export const TOOL_STEP_DETAIL_MAX_CHARS = 200;
 /** Longest tool result text kept on its completion event for the activity view. */
 export const TOOL_RESULT_PREVIEW_MAX_CHARS = 4_000;
 
-export const ToolStepOutcome = z.enum(["ok", "error"]);
-export type ToolStepOutcome = z.infer<typeof ToolStepOutcome>;
+/** How one call ended, as the live activity view shows it. */
+export const ToolCallOutcome = z.enum(["ok", "error"]);
+export type ToolCallOutcome = z.infer<typeof ToolCallOutcome>;
 
 /** One tool call as the live view first hears of it. */
 export const ToolCallRefSchema = z.object({
@@ -121,7 +122,7 @@ export const ToolCallRefSchema = z.object({
   /** The call's main argument on one line: the command, path, query or similar. */
   detail: z.string().max(TOOL_STEP_DETAIL_MAX_CHARS).optional(),
   /** Set when the call finished before its step could show. */
-  outcome: ToolStepOutcome.optional(),
+  outcome: ToolCallOutcome.optional(),
   durationMs: z.number().int().nonnegative().optional(),
 });
 export type ToolCallRef = z.infer<typeof ToolCallRefSchema>;
@@ -136,8 +137,16 @@ export const ToolStepSchema = z.object({
   executionId: z.string().optional(),
   detail: z.string().max(TOOL_STEP_DETAIL_MAX_CHARS).optional(),
   /** Absent while the call runs or when the run ended before it finished. */
-  outcome: ToolStepOutcome.optional(),
+  outcome: ToolCallOutcome.optional(),
   durationMs: z.number().int().nonnegative().optional(),
+  /** How many of this step's calls succeeded, failed, or were stopped before finishing. */
+  outcomes: z
+    .object({
+      succeeded: z.number().int().positive().optional(),
+      failed: z.number().int().positive().optional(),
+      stopped: z.number().int().positive().optional(),
+    })
+    .optional(),
 });
 export type ToolStep = z.infer<typeof ToolStepSchema>;
 

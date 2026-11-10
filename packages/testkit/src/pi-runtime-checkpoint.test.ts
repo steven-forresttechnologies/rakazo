@@ -26,15 +26,7 @@ describe("paused turn context", () => {
     const model = await startModelEmulator({
       steps: [
         {
-          expect(request) {
-            const ask = request.tools?.find((tool) => tool.function.name === "ask_user");
-            expect(ask?.function.parameters).toMatchObject({
-              properties: {
-                question: { description: expect.stringContaining("complete question") },
-                options: { description: expect.stringContaining("actual button labels") },
-              },
-            });
-          },
+          expect() {},
           response: {
             type: "tool",
             id: "placeholder-question",

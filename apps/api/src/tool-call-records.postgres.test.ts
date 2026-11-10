@@ -4,8 +4,7 @@ import { loadLiveRunEvents } from "./thread-snapshot.js";
 import { loadToolCallRecords } from "./tool-call-records.js";
 
 const databaseUrl = process.env.DATABASE_URL;
-const describePostgres =
-  process.env.VERIFY_DATABASE && databaseUrl ? describe.sequential : describe.skip;
+const describePostgres = process.env.VERIFY_DATABASE && databaseUrl ? describe : describe.skip;
 
 describePostgres("tool call records with CONTENT_ENCRYPTION on (PostgreSQL)", () => {
   const suffix = `${process.pid}-${Date.now()}`;

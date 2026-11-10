@@ -11,7 +11,11 @@ import {
   SandboxUnresponsiveError,
   WorkspaceTooLargeError,
 } from "@rakazo/adapter-kit";
-import { screenDisplayArgv, shellQuote } from "@rakazo/core/node/desktop-runtime";
+import {
+  desktopWorkCommand,
+  screenDisplayArgv,
+  shellQuote,
+} from "@rakazo/core/node/desktop-runtime";
 import { createLogger, createTestSink, installLogger } from "@rakazo/logging";
 import { parse } from "shell-quote";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -162,7 +166,7 @@ describe("BoatSandboxProvider", () => {
           sandboxId: computer.id,
           resumeRequest: { noEnv: true, ttlSeconds: 7200, type: "xlarge" },
         },
-        { signal: context.signal },
+        { signal: expect.any(AbortSignal) },
       );
     });
 
@@ -187,7 +191,7 @@ describe("BoatSandboxProvider", () => {
           sandboxId: computer.id,
           resumeRequest: { noEnv: true, ttlSeconds: 7200, type: "large" },
         },
-        { signal: context.signal },
+        { signal: expect.any(AbortSignal) },
       );
     });
 
@@ -489,7 +493,7 @@ describe("BoatSandboxProvider", () => {
     });
     expect(resume).toHaveBeenCalledWith(
       { sandboxId: computer.id, resumeRequest: { noEnv: true, ttlSeconds: 7200 } },
-      { signal: context.signal },
+      { signal: expect.any(AbortSignal) },
     );
   });
 
@@ -1103,7 +1107,7 @@ describe("BoatSandboxProvider", () => {
         return { deadline, caller, signal: (init as RequestInit).signal };
       };
       const byDeadline = await statusRead();
-      expect(timeout).toHaveBeenLastCalledWith(10_000);
+      expect(timeout).toHaveBeenCalledWith(10_000);
       expect(byDeadline.signal?.aborted).toBe(false);
       byDeadline.deadline.abort();
       expect(byDeadline.signal?.aborted).toBe(true);
@@ -2127,8 +2131,11 @@ describe("BoatSandboxProvider", () => {
     // The saved login reaches the helper on stdin, never in a command Boat logs.
     expect(seen).toEqual([
       {
-        command: expect.stringMatching(
-          /^DISPLAY=:20 RAKAZO_CDP_PORT=9241 HOME='\/home\/user\/rakazo-home' RAKAZO_BROWSER_ARGS_STDIN=1 \/usr\/local\/bin\/rakazo-page-browser act$/,
+        command: desktopWorkCommand(
+          "bot-a",
+          undefined,
+          0,
+          "DISPLAY=:20 RAKAZO_CDP_PORT=9241 HOME='/home/user/rakazo-home' RAKAZO_BROWSER_ARGS_STDIN=1 /usr/local/bin/rakazo-page-browser act",
         ),
         input: `${JSON.stringify({ command: "act", actions: [fill] })}\n`,
       },

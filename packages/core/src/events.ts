@@ -1,9 +1,8 @@
 import type {
   MessageBlock,
   ThreadMessage,
+  ToolCallOutcome,
   ToolCallRef,
-  ToolStep,
-  ToolStepOutcome,
 } from "@rakazo/contracts";
 import { TOOL_STEP_DETAIL_MAX_CHARS } from "@rakazo/contracts";
 import { cloudAgentBlockFromPayload } from "./cloud-agent.js";
@@ -303,7 +302,7 @@ function clampRunFailure(message: string): string {
 export type LiveMessageUpdate =
   | { type: "progress"; payload: Record<string, unknown> | undefined }
   | ({ type: "tool" } & ToolCallRef)
-  | { type: "tool_done"; executionId: string; outcome: ToolStepOutcome; durationMs?: number };
+  | { type: "tool_done"; executionId: string; outcome: ToolCallOutcome; durationMs?: number };
 
 /** The live update an `agent.tool.called` event carries. */
 export function toolCalledUpdate(payload: Record<string, unknown>): LiveMessageUpdate {
@@ -450,7 +449,7 @@ function completeToolCall(
 export function completeToolStep(
   segments: readonly MessageBlock[],
   executionId: string,
-  outcome: ToolStepOutcome,
+  outcome: ToolCallOutcome,
   durationMs?: number,
 ): MessageBlock[] {
   return completeToolCall(segments, { type: "tool_done", executionId, outcome, durationMs });
@@ -488,6 +487,41 @@ export function liveActivityLine(
   const live = messages.findLast((message) => message.id.startsWith("progress:"));
   const tail = live?.blocks.at(-1);
   return (tail?.kind === "progress" && tail.activity && tail.text.trim()) || undefined;
+}
+
+export type ToolStepOutcome = "succeeded" | "failed" | "stopped";
+export type ToolStep = Extract<MessageBlock, { kind: "steps" }>["steps"][number];
+
+/**
+ * Records how each call ended on the step it shows as. `calls` lists every step a call made, in
+ * call order (a connector call can make several). If they stop lining up with the steps, the
+ * steps are returned as they were rather than credited to the wrong step.
+ */
+export function withToolStepOutcomes(
+  segments: readonly MessageBlock[],
+  calls: readonly { label: string; outcome: ToolStepOutcome | undefined }[],
+): MessageBlock[] {
+  let next = 0;
+  const annotated: MessageBlock[] = [];
+  for (const block of segments) {
+    if (block.kind !== "steps") {
+      annotated.push(block);
+      continue;
+    }
+    const steps: ToolStep[] = [];
+    for (const step of block.steps) {
+      const outcomes: NonNullable<ToolStep["outcomes"]> = {};
+      for (let index = 0; index < step.count; index += 1) {
+        const call = calls[next++];
+        if (call?.label !== step.label) return [...segments];
+        if (call.outcome) outcomes[call.outcome] = (outcomes[call.outcome] ?? 0) + 1;
+      }
+      const { outcomes: _previous, ...rest } = step;
+      steps.push(Object.keys(outcomes).length > 0 ? { ...rest, outcomes } : rest);
+    }
+    annotated.push({ ...block, steps });
+  }
+  return annotated;
 }
 
 /**
