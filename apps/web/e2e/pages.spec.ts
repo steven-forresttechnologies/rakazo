@@ -130,6 +130,79 @@ test("a week calendar keeps its days aligned in a desktop two-column page", asyn
   await captureScreenshot(page, testInfo, "page-calendar-two-columns");
 });
 
+test("shared page contents jump below the header and copy fallback", async ({
+  page,
+  browser,
+}, testInfo) => {
+  await signup(page, `pages-anchor-${Date.now()}@rakazo.test`, "password12", "Page Reader");
+  await completeOnboarding(page);
+  const title = "Reading guide";
+  const source = `export default function Guide() {
+    return <Page title="Reading guide">
+      <TableOfContents items={[{ label: "Details", id: "details" }]} />
+      <Section heading="Introduction">{Array.from({ length: 30 }, (_, i) => <Text key={i}>An example paragraph before the destination.</Text>)}</Section>
+      <Section heading="Details" id="details">{Array.from({ length: 30 }, (_, i) => <Text key={i}>An example paragraph after the destination.</Text>)}</Section>
+    </Page>;
+  }`;
+  await send(page, `call save_page with ${JSON.stringify({ title, source })}\nthen say Done.`);
+  const card = page.getByTestId("page-card");
+  await expect(card).toHaveCount(1, { timeout: 30_000 });
+  await card.getByRole("button", { name: `Open ${title}` }).click();
+  await page.getByTestId("page-view").getByRole("button", { name: "Share" }).click();
+  const share = page.getByTestId("page-share");
+  await share.getByRole("radio", { name: /Anyone with the link/ }).click();
+  const link = share.getByRole("link", { name: "Open link" });
+  await expect(link).toBeVisible();
+  const visitor = await browser.newContext({ reducedMotion: "reduce" });
+  const outside = await visitor.newPage();
+  await outside.setViewportSize({ width: 1280, height: 720 });
+  await outside.goto((await link.getAttribute("href"))!);
+  const frame = pageFrame(outside, title);
+  const target = frame.getByRole("heading", { name: "Details", exact: true });
+  const jump = async () => {
+    await frame.getByRole("link", { name: "Details", exact: true }).click();
+    const header = (await outside.locator("header").boundingBox())!;
+    // Nested-frame scrolling rounds fractional CSS coordinates. Allow one pixel, not an
+    // obscured heading (the original layout placed it at the top of the viewport).
+    await expect
+      .poll(async () => (await target.boundingBox())?.y ?? -Infinity)
+      .toBeGreaterThanOrEqual(header.y + header.height - 1);
+    await expect.poll(async () => (await target.boundingBox())?.y ?? Infinity).toBeLessThan(300);
+    expect(await outside.evaluate(() => window.scrollY)).toBe(0);
+  };
+  await jump();
+  await captureScreenshot(outside, testInfo, "page-public-contents-jump");
+  // A failed clipboard write leaves the manual-copy prompt outside the page's scroll area.
+  await outside.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: () => Promise.reject(new Error("denied")) },
+      configurable: true,
+    });
+    document.execCommand = () => false;
+  });
+  await outside.getByRole("button", { name: "Copy link" }).click();
+  const fallback = outside.getByRole("textbox", { name: "Page link" });
+  await expect(fallback).toBeVisible();
+  await jump();
+  const fallbackBox = (await fallback.boundingBox())!;
+  expect((await target.boundingBox())!.y).toBeGreaterThanOrEqual(
+    fallbackBox.y + fallbackBox.height - 1,
+  );
+  await captureScreenshot(outside, testInfo, "page-public-contents-copy-fallback");
+  await outside.setViewportSize({ width: 320, height: 120 });
+  await target.scrollIntoViewIfNeeded();
+  await expect(target).toBeInViewport();
+  await captureScreenshot(outside, testInfo, "page-public-short-viewport");
+  await outside.setViewportSize({ width: 1280, height: 720 });
+  await outside.emulateMedia({ media: "print" });
+  await expect(outside.locator("header")).toBeHidden();
+  await expect(fallback).toBeHidden();
+  expect(
+    await outside.locator("[data-page-print]").evaluate((shell) => shell.scrollHeight),
+  ).toBeGreaterThan(720);
+  await visitor.close();
+});
+
 test("a bot's page shows in its reply, opens full screen, is shared by link and updates", async ({
   page,
   browser,
@@ -648,6 +721,16 @@ test("a page's failures, a deleted page's card, and the Library's Share, search 
   await page.route("**/rpc/pages/rename", (route) => route.abort("failed"));
   await view.getByRole("button", { name: "Beta" }).click();
   await view.getByRole("textbox", { name: "Page title" }).fill("Gamma");
+  for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
+    for (const key of ["Enter", "Escape"]) {
+      await view.getByRole("textbox", { name: "Page title" }).dispatchEvent("keydown", {
+        key,
+        bubbles: true,
+        ...composition,
+      });
+      await expect(view.getByRole("textbox", { name: "Page title" })).toHaveValue("Gamma");
+    }
+  }
   await view.getByRole("textbox", { name: "Page title" }).press("Enter");
   await expect(view.getByRole("alert")).toHaveText("Could not rename this page. Try again.");
   await captureScreenshot(page, testInfo, "page-rename-error");
@@ -786,6 +869,18 @@ test("a page's failures, a deleted page's card, and the Library's Share, search 
   await library.getByRole("button", { name: "Actions for Alpha" }).click();
   await page.getByRole("menuitem", { name: "Rename" }).click();
   await library.getByRole("textbox", { name: "Page title" }).fill("Alpha renamed");
+  for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
+    for (const key of ["Enter", "Escape"]) {
+      await library.getByRole("textbox", { name: "Page title" }).dispatchEvent("keydown", {
+        key,
+        bubbles: true,
+        ...composition,
+      });
+      await expect(library.getByRole("textbox", { name: "Page title" })).toHaveValue(
+        "Alpha renamed",
+      );
+    }
+  }
   await captureScreenshot(page, testInfo, "page-library-rename");
   await library.getByRole("textbox", { name: "Page title" }).press("Enter");
   await expect(library.getByRole("button", { name: /^Alpha renamed/ })).toBeVisible();

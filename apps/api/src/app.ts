@@ -26,6 +26,7 @@ import type {
   UserDeviceGateway,
 } from "@rakazo/adapters";
 import {
+  BillingEmulator,
   ChatSdkMessagingSurface,
   CodexCatalogCache,
   configuredBotEmailProvider,
@@ -84,6 +85,7 @@ import {
   createAuth,
   createDirectory,
   isBlockedAuthPath,
+  publicSignInProviders,
 } from "@rakazo/auth";
 import type { Actor, AuthCapabilities, ModelCredential } from "@rakazo/contracts";
 import {
@@ -145,6 +147,7 @@ import { configuredEmailProvider } from "./email.js";
 import { mountEmailInboundRoute } from "./email-inbound.js";
 import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
+import { createExperiments } from "./experiments.js";
 import { healthRoutes } from "./health.js";
 import { homeRetentionSweep } from "./home-retention.js";
 import { startHourlySweep } from "./hourly-sweep.js";
@@ -433,8 +436,16 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   };
   const onEmailError = emailErrorLogger("transactional email delivery failed");
   const stripeBilling = stripeBillingConfigFromEnv(env);
+  const localBillingEmulator =
+    !billingOverride && !stripeBilling && env.billingEmulator
+      ? new BillingEmulator({ modelCredits: true })
+      : undefined;
+  if (localBillingEmulator && !isLocalhostOrLoopbackIp(env.apiHost)) {
+    throw new Error("BILLING_EMULATOR requires API_HOST to be a loopback host");
+  }
   const billingProvider: BillingProvider | undefined =
-    billingOverride ?? (stripeBilling ? new StripeBillingProvider(stripeBilling) : undefined);
+    billingOverride ??
+    (stripeBilling ? new StripeBillingProvider(stripeBilling) : localBillingEmulator);
   const billing = billingProvider
     ? createBillingService({
         prisma,
@@ -443,6 +454,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
         webOrigin: env.webOrigin,
         managedModelsAvailable: resolveDeploymentModel().configured,
         analytics,
+        experiments: createExperiments(env.experiments),
       })
     : undefined;
   const modelCreditsEnabled = billing?.modelCreditsEnabled ?? false;
@@ -464,8 +476,9 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       connectors: connectorOverrides,
     },
   );
-  const { mcpOAuth, mcp, pipedream, installed, integrationSettings, stack } = connectors;
-  const runtime =
+  const { mcpOAuth, mcp, pipedream, installed, integrationSettings, stack, userCloudAgents } =
+    connectors;
+  const baseRuntime =
     runtimeOverride ??
     (env.agentRuntime === "scripted"
       ? new ScriptedAgentRuntime()
@@ -512,6 +525,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     passwordAuth: env.passwordAuth,
     breachedPasswordCheck: env.breachedPasswordCheck,
     oidc: env.oidc,
+    social: env.social,
     secret: env.authSecret,
     baseURL: env.authUrl,
     webOrigin: env.webOrigin,
@@ -547,6 +561,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
           sandbox,
           home,
           jobs,
+          memoryProviders,
           artifacts,
           dataDir: env.dataDir,
           messagingInstallations,
@@ -614,55 +629,67 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   const codexCatalog = new CodexCatalogCache();
   // One instance: chat runs submit videos and, in single-process mode, background polls finish them.
   const mediaGeneration = createMediaGenerationProvider();
-  const { executor, jobHandlers } = createRunRuntime(runtimeEnv, connectors, {
-    billingEnabled: modelCreditsEnabled,
-    mediaGeneration,
-    contextStrategy,
-    prisma,
-    runtime,
-    codexCatalog,
-    sandbox,
-    memory,
-    memoryProviders,
-    home,
-    artifacts,
-    secretStore: secrets,
-    secretHttp: remoteConnectors,
-    notifications,
-    jobs,
-    events,
-    onTicketChange: ticketChanges,
-    email: botEmail,
-    messaging,
-    cloudAgent,
-    userDevices:
-      userDevicesOverride ??
-      withHostComputerScreen(userDevices, {
-        prisma,
-        sandboxKind: env.sandboxProvider,
-        url: hostComputer.hostComputerUrl,
-        token: hostComputer.hostComputerToken,
-      }),
-    paymentWallet,
-    shutdownSignal: shutdown.signal,
-    now,
-  });
+  const { runtime, executor, jobHandlers, messagingDelivery, teamChat } = createRunRuntime(
+    runtimeEnv,
+    connectors,
+    {
+      billingEnabled: modelCreditsEnabled,
+      mediaGeneration,
+      contextStrategy,
+      prisma,
+      runtime: baseRuntime,
+      codexCatalog,
+      sandbox,
+      memory,
+      memoryProviders,
+      home,
+      artifacts,
+      secretStore: secrets,
+      secretHttp: remoteConnectors,
+      notifications,
+      jobs,
+      events,
+      onTicketChange: ticketChanges,
+      email: botEmail,
+      messaging,
+      isMessagingInstallationActive: messagingInstallations
+        ? (id: string) => messagingInstallations.isActive(id)
+        : undefined,
+      cloudAgent,
+      userDevices:
+        userDevicesOverride ??
+        withHostComputerScreen(userDevices, {
+          prisma,
+          sandboxKind: env.sandboxProvider,
+          url: hostComputer.hostComputerUrl,
+          token: hostComputer.hostComputerToken,
+        }),
+      paymentWallet,
+      shutdownSignal: shutdown.signal,
+      now,
+    },
+  );
 
   if (inMemoryJobs) {
     await inMemoryJobs.start(jobHandlers);
   }
   runs?.attach(jobHandlers);
   const reconciler = inMemoryJobs
-    ? createRunReconciler({
-        prisma,
-        jobs,
-        events,
-        notifications,
-        cloudAgent,
-        paymentWallet,
-        mediaGeneration,
-        billingEnabled: modelCreditsEnabled,
-      })
+    ? createRunReconciler(
+        {
+          prisma,
+          jobs,
+          events,
+          notifications,
+          cloudAgent,
+          userCloudAgents,
+          paymentWallet,
+          mediaGeneration,
+          billingEnabled: modelCreditsEnabled,
+        },
+        {},
+        { messagingDelivery, teamChat },
+      )
     : undefined;
   reconciler?.start();
   const stopReferralEmails =
@@ -700,6 +727,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       sandbox,
       home,
       jobs,
+      memoryProviders,
       artifacts,
       dataDir: env.dataDir,
       messagingInstallations,
@@ -725,6 +753,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     pluginRepoFetcher,
     pluginMarketplaceRead,
     cloudAgent,
+    userCloudAgents,
     paymentWallet,
     codexCatalog,
     prisma,
@@ -757,6 +786,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     dataDir: env.dataDir,
     billing,
     messagingInstallations,
+    messagingDelivery,
     messaging: {
       enabled: Boolean(messaging),
       providers: messaging?.platforms().map((platform) => platform.provider) ?? [],
@@ -829,6 +859,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       sso: env.oidc
         ? { name: env.oidc.name, availability: auth.ssoAvailability() ?? "checking" }
         : null,
+      providers: publicSignInProviders(env.social, env.oidc),
       passwordAuth: env.passwordAuth !== false,
       passwordReset: env.passwordAuth !== false && Boolean(email),
       resetUrl:
@@ -1034,6 +1065,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       sandbox,
       home,
       jobs,
+      memoryProviders,
       artifacts,
       dataDir: env.dataDir,
       messagingInstallations,
@@ -1064,21 +1096,23 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       authenticate: sessionActor,
     });
   }
-  const messagingRuntime = messaging
-    ? await startMessagingRuntime({
-        app,
-        prisma,
-        events,
-        jobs,
-        sandbox,
-        secrets,
-        artifacts,
-        runtime,
-        env,
-        messaging,
-        messagingInstallations,
-      })
-    : undefined;
+  const messagingRuntime =
+    messaging && messagingDelivery && teamChat
+      ? await startMessagingRuntime({
+          app,
+          prisma,
+          events,
+          jobs,
+          sandbox,
+          secrets,
+          artifacts,
+          env,
+          messaging,
+          messagingInstallations,
+          delivery: messagingDelivery,
+          teamChat,
+        })
+      : undefined;
 
   app.route(
     "/",
