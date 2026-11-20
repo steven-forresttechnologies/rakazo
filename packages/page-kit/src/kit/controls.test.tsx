@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ReactElement } from "react";
-import { act } from "react";
+import { act, useLayoutEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -17,6 +17,7 @@ import {
   Toggle,
 } from "./controls.js";
 import { Segmented } from "./data.js";
+import { Section } from "./layout.js";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -136,6 +137,154 @@ describe("controls", () => {
     vi.useRealTimers();
   });
 
+  it.each([true, false])("ignores an older copy result after a newer result (%s)", async (ok) => {
+    const view = render(<CopyButton label="Copy" text="value" />);
+    click(q("button"));
+    click(q("button"));
+    const requests = posted as { id: string }[];
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "rakazo-page:copied", id: requests[1]!.id, ok },
+        }),
+      );
+    });
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "rakazo-page:copied", id: requests[0]!.id, ok: !ok },
+        }),
+      );
+    });
+    expect(q("button")!.textContent).toBe(ok ? "Copied" : "Copy");
+    expect(q(".rk-copy-fallback")?.textContent ?? null).toBe(ok ? null : "value");
+    view.unmount();
+  });
+
+  it.each([true, false])("ignores a pending copy after its content changes (%s)", async (ok) => {
+    const view = render(<CopyButton label="Copy" text="old" />);
+    click(q("button"));
+    const request = posted[0] as { id: string };
+    view.rerender(<CopyButton label="Copy" text="new" />);
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "rakazo-page:copied", id: request.id, ok },
+        }),
+      );
+    });
+    expect(q("button")!.textContent).toBe("Copy");
+    expect(q(".rk-copy-fallback")).toBeNull();
+    view.unmount();
+  });
+
+  it.each([true, false])(
+    "clears settled copy feedback when its content changes (%s)",
+    async (ok) => {
+      const view = render(<CopyButton label="Copy" text="old" />);
+      click(q("button"));
+      const request = posted[0] as { id: string };
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            data: { type: "rakazo-page:copied", id: request.id, ok },
+          }),
+        );
+      });
+      view.rerender(<CopyButton label="Copy" text="new" />);
+      expect(q("button")!.textContent).toBe("Copy");
+      expect(q(".rk-copy-fallback")).toBeNull();
+      view.unmount();
+    },
+  );
+
+  it.each([true, false])("never commits old feedback for changed text (%s)", async (ok) => {
+    const committed: { button: string | null; fallback: string | null }[] = [];
+    function Probe({ value }: { value: string }) {
+      useLayoutEffect(() => {
+        committed.push({
+          button: q("button")?.textContent ?? null,
+          fallback: q(".rk-copy-fallback")?.textContent ?? null,
+        });
+      }, [value]);
+      return <CopyButton label="Copy" text={value} />;
+    }
+    const view = render(<Probe value="old" />);
+    click(q("button"));
+    const request = posted[0] as { id: string };
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "rakazo-page:copied", id: request.id, ok },
+        }),
+      );
+    });
+    view.rerender(<Probe value="new" />);
+    expect(committed[1]).toEqual({ button: "Copy", fallback: null });
+    view.unmount();
+  });
+
+  it("ignores an older response while the newest copy is still pending", async () => {
+    const view = render(<CopyButton label="Copy" text="value" />);
+    click(q("button"));
+    click(q("button"));
+    const requests = posted as { id: string }[];
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "rakazo-page:copied", id: requests[0]!.id, ok: false },
+        }),
+      );
+    });
+    expect(q("button")!.textContent).toBe("Copy");
+    expect(q(".rk-copy-fallback")).toBeNull();
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "rakazo-page:copied", id: requests[1]!.id, ok: true },
+        }),
+      );
+    });
+    expect(q("button")!.textContent).toBe("Copied");
+    view.unmount();
+  });
+
+  it("ignores an older timeout and gives a repeated success its own confirmation interval", async () => {
+    vi.useFakeTimers();
+    const view = render(<CopyButton label="Copy" text="value" />);
+    try {
+      click(q("button"));
+      await act(async () => vi.advanceTimersByTime(1000));
+      click(q("button"));
+      const requests = posted as { id: string }[];
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            data: { type: "rakazo-page:copied", id: requests[1]!.id, ok: true },
+          }),
+        );
+      });
+      await act(async () => vi.advanceTimersByTime(1100));
+      expect(q("button")!.textContent).toBe("Copied");
+      expect(q(".rk-copy-fallback")).toBeNull();
+      click(q("button"));
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            data: { type: "rakazo-page:copied", id: requests[2]!.id, ok: true },
+          }),
+        );
+      });
+      await act(async () => vi.advanceTimersByTime(1599));
+      expect(q("button")!.textContent).toBe("Copied");
+      await act(async () => vi.advanceTimersByTime(1));
+      expect(q("button")!.textContent).toBe("Copy");
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
+  });
+
   it("asks the host to open web and mail links and leaves other addresses as text", () => {
     render(
       <>
@@ -237,4 +386,56 @@ describe("controls", () => {
     expect(buttons).toHaveLength(200);
     expect(q('[aria-pressed="true"]')!.textContent).toBe("o240");
   });
+
+  it("shows a section's content again once the value that broke it is replaced", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    function Period() {
+      const [period, setPeriod] = useState("bad");
+      return (
+        <Section
+          heading="Revenue"
+          actions={<Segmented options={["bad", "good"]} value={period} onChange={setPeriod} />}
+        >
+          {period === "bad" ? <Broken /> : <p>Good numbers</p>}
+        </Section>
+      );
+    }
+    render(<Period />);
+    expect(q(".rk-error")).not.toBeNull();
+    click(host.querySelectorAll("button")[1]!);
+    expect(q(".rk-error")).toBeNull();
+    expect(host.textContent).toContain("Good numbers");
+    expect(consoleError).toHaveBeenCalled();
+  });
+
+  it("tries content that keeps throwing once per re-render, not in a loop", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    let attempts = 0;
+    function CountingBroken(): never {
+      attempts += 1;
+      throw new Error("bad period");
+    }
+    const page = () => (
+      <Section heading="Revenue">
+        <CountingBroken />
+      </Section>
+    );
+    const view = render(page());
+    expect(q(".rk-error")).not.toBeNull();
+    const afterFirst = attempts;
+    for (let i = 0; i < 3; i++) {
+      const before = attempts;
+      view.rerender(page());
+      // React retries a throwing render once itself, so each pass is a small fixed number.
+      expect(attempts - before).toBeLessThanOrEqual(afterFirst);
+      expect(attempts - before).toBeGreaterThan(0);
+    }
+    const settled = attempts;
+    expect(q(".rk-error")!.textContent).toContain("bad period");
+    expect(attempts).toBe(settled);
+  });
 });
+
+function Broken(): never {
+  throw new Error("bad period");
+}
