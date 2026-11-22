@@ -6,6 +6,7 @@ import type {
   SandboxProviderOptions,
 } from "@rakazo/adapters";
 import {
+  absoluteHttpOrigin,
   apnsVoipConfig,
   autoReviewMinConfidence,
   deploymentLabsFromEnv,
@@ -18,6 +19,7 @@ import {
   resolveSandboxProvider,
   sandboxProviderOptionsFromEnv,
   secretStoreOptionsFromEnv,
+  webOriginFromEnv,
   workspaceSaveLimits,
 } from "@rakazo/adapters";
 import type { OidcConfig, SocialAuthConfig } from "@rakazo/auth";
@@ -33,6 +35,10 @@ import {
   uploadSizeFromEnv,
 } from "@rakazo/core";
 import {
+  MAX_SANDBOX_COMMAND_TIMEOUT_MS,
+  sandboxCommandTimeoutExceedsMax,
+} from "@rakazo/core/node/sandbox-command";
+import {
   resolveAuthSecret,
   resolveContentEncryption,
   resolveEncryptionKey,
@@ -44,9 +50,6 @@ import type { DeploymentVoice } from "./voice/deployment-config.js";
 import { deploymentVoiceFromEnv } from "./voice/deployment-config.js";
 
 export { resolveCloudAgentProvider, resolveSandboxProvider } from "@rakazo/adapters";
-
-/** Where a local development stack serves the web client. */
-const DEFAULT_WEB_ORIGIN = "http://127.0.0.1:5173";
 
 export interface AppEnv extends MessagingEnvironmentValues {
   deploymentVoice?: DeploymentVoice;
@@ -134,7 +137,6 @@ export interface AppEnv extends MessagingEnvironmentValues {
   smtpUrl: string | undefined;
   botEmailSmtpUrl?: string;
   emailProvider?: string;
-  welcomeEmailEnabled?: boolean;
   emailApiKey?: string;
   emailFrom: string | undefined;
   emailReplyTo?: string;
@@ -192,6 +194,11 @@ export function withEnvOverrides(env: AppEnv, overrides: Partial<AppEnv>): AppEn
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
   secretStoreOptionsFromEnv(source);
+  if (sandboxCommandTimeoutExceedsMax(source)) {
+    getLogger().warn("SANDBOX_COMMAND_TIMEOUT_MS is above the maximum; using the maximum", {
+      maximumMs: MAX_SANDBOX_COMMAND_TIMEOUT_MS,
+    });
+  }
   const issuer = optional(source.OIDC_ISSUER);
   const clientId = optional(source.OIDC_CLIENT_ID);
   const clientSecret = optional(source.OIDC_CLIENT_SECRET);
@@ -257,7 +264,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
   if (scimBearerToken && (scimBearerToken.length < 32 || /\s/.test(scimBearerToken)))
     throw new Error("SCIM_BEARER_TOKEN must be at least 32 characters with no spaces");
   const authSecret = resolveAuthSecret(source);
-  const webOrigin = resolveWebOrigin(source.WEB_ORIGIN, DEFAULT_WEB_ORIGIN, "WEB_ORIGIN");
+  const webOrigin = webOriginFromEnv(source);
   const sandboxProvider = resolveSandboxProvider(source);
   const cloudAgentProvider = resolveCloudAgentProvider(source);
   const deploymentModel = resolveDeploymentModel(source);
@@ -273,7 +280,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     realtimeDatabaseUrl: source.REALTIME_DATABASE_URL ?? required(source, "DATABASE_URL"),
     desktopStackToken: optional(source.RAKAZO_DESKTOP_STACK_TOKEN),
     authSecret,
-    authUrl: resolveWebOrigin(source.BETTER_AUTH_URL, webOrigin, "BETTER_AUTH_URL"),
+    authUrl: absoluteHttpOrigin(source.BETTER_AUTH_URL, webOrigin, "BETTER_AUTH_URL"),
     webOrigin,
     extraAuthOrigins: parseExtraAuthOrigins(source.RAKAZO_EXTRA_AUTH_ORIGINS),
     passkeyAppleAppIds: list(source.PASSKEY_APPLE_APP_IDS),
@@ -343,7 +350,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     emailFrom: optional(source.EMAIL_FROM),
     emailReplyTo: optional(source.EMAIL_REPLY_TO),
     inboundEmail: inboundEmailFromEnv(source),
-    welcomeEmailEnabled: source.WELCOME_EMAIL_ENABLED === "true",
     stripeSecretKey: optional(source.STRIPE_SECRET_KEY),
     stripeWebhookSecret: optional(source.STRIPE_WEBHOOK_SECRET),
     stripePriceId: optional(source.STRIPE_PRICE_ID),
@@ -374,22 +380,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     crispWebsiteId: parseCrispWebsiteId(source.CRISP_WEBSITE_ID),
     demoAccount: demoAccountFromEnv(source),
   };
-}
-
-/**
- * An origin used to build absolute links. Trailing slashes are dropped so
- * `${webOrigin}/path` cannot produce `https://host//path`; providers reject a
- * double-slash redirect URI as a mismatch against the one registered with them.
- */
-function resolveWebOrigin(value: string | undefined, fallback: string, name: string): string {
-  const origin = (optional(value) ?? fallback).replace(/\/+$/, "");
-  try {
-    const url = new URL(origin);
-    if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error();
-  } catch {
-    throw new Error(`${name} must be an absolute http(s) URL`);
-  }
-  return origin;
 }
 
 /**
