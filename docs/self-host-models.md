@@ -159,8 +159,10 @@ What it needs:
   OS user. The official Docker images and the desktop app's local stack do not include Claude
   Code, and adding it to them is not supported.
 - Claude Code 2.1.280 or newer on that user's `PATH`, signed in once in a terminal as that user
-  with `claude auth login`. This route uses no Claude sign-in inside Rakazo and no Claude token,
-  so `claude setup-token` is not needed.
+  with `claude auth login`. On a server without a browser, the CLI can use the token
+  `claude setup-token` creates instead: set it as `CLAUDE_CODE_OAUTH_TOKEN` together with
+  `RAKAZO_CLAUDE_CODE_SETUP_TOKEN=1` in the API's and worker's environment. Either way there is
+  no Claude sign-in inside Rakazo.
 - One account on the server. A Claude sign-in belongs to one person, so Rakazo refuses Claude Code
   runs while the server has more than one account (people who only message bots from chat apps do
   not count) or bills for model usage.
@@ -179,8 +181,9 @@ Anthropic's terms; see [Legal and compliance](https://code.claude.com/docs/en/le
 
 The CLI runs in an empty private temporary directory with an allowlisted environment. API keys and
 other server secrets, including `ANTHROPIC_API_KEY`, are never passed to it, so it always uses its
-own sign-in. Only the deployment model runs on Claude Code; it is not offered as a connection in
-**Settings → Models**.
+own sign-in. `RAKAZO_CLAUDE_CODE_SETUP_TOKEN=1` adds only `CLAUDE_CODE_OAUTH_TOKEN`, which the CLI
+reads and Rakazo does not. Only the deployment model runs on Claude Code; it is not offered as a
+connection in **Settings → Models**.
 
 ## Ollama Cloud
 
@@ -229,8 +232,8 @@ provider not on it is not offered, a key for it is refused on save and on import
 switched to it, and its runs fail with a clear error. An unset or empty list means every provider,
 exactly the behavior without it.
 
-Hosted OpenAI-compatible presets include Ollama Cloud (`ollama-cloud`) and Concentrate AI
-(`concentrate`). Choose either in **Settings → Models**, enter its API key, and select
+Hosted OpenAI-compatible presets include Ollama Cloud (`ollama-cloud`), Concentrate AI
+(`concentrate`) and DeepInfra (`deepinfra`). Choose one in **Settings → Models**, enter its API key, and select
 a model. Rakazo loads the list automatically. Their HTTPS hosts remain available with `RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC=0`.
 If you set a provider allowlist, include `openai-compatible` and the ids of the presets you
 want to keep. Leaving out a preset id hides it and removes its host exemption.
@@ -315,7 +318,20 @@ MEDIA_GENERATION_API_KEY=replace-with-media-api-key
 MEDIA_GENERATION_IMAGE_MODEL=gpt-image-1
 ```
 
-`MEDIA_GENERATION_PROVIDER` accepts `disabled` (the default), `fal`, `openai`, or `fake`
+`openrouter` makes images through OpenRouter's Images API (`POST /images`) and four-second
+videos through its video jobs API (`POST /videos`); set either model or both:
+
+```dotenv
+MEDIA_GENERATION_PROVIDER=openrouter
+MEDIA_GENERATION_BASE_URL=https://openrouter.ai/api/v1
+MEDIA_GENERATION_API_KEY=replace-with-media-api-key
+MEDIA_GENERATION_IMAGE_MODEL=openai/gpt-image-1-mini
+MEDIA_GENERATION_VIDEO_MODEL=google/veo-3.1-fast
+```
+
+The video model must accept a four-second duration.
+
+`MEDIA_GENERATION_PROVIDER` accepts `disabled` (the default), `fal`, `openai`, `openrouter`, or `fake`
 (for offline testing only). The base URL is optional and defaults to the provider's URL above.
 Only set the image/video model fields for capabilities you want enabled; `openai` takes an
 image model only. Compatible servers can use the same connection fields; models must support
