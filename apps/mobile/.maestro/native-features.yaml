@@ -187,9 +187,13 @@ tags:
 - assertTrue: ${output.voice.ok}
 - openLink: "rakazo:///voice"
 - extendedWaitUntil:
-    visible: "Scripted"
+    visible: ".*This device.*"
     timeout: 15000
+- tapOn: ".*This device.*"
 - tapOn: "Scripted"
+- extendedWaitUntil:
+    visible: ".*Scripted.*"
+    timeout: 15000
 - openLink: "rakazo:///thread?botId=${RAKAZO_SCREENSHOT_BOT_ID}&name=Researcher"
 - extendedWaitUntil:
     visible: "Message Researcher"
