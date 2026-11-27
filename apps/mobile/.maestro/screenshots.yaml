@@ -115,7 +115,7 @@ tags:
 
 - openLink: "rakazo:///voice"
 - extendedWaitUntil:
-    visible: "Scripted"
+    visible: ".*This device.*"
     timeout: 10000
 - takeScreenshot: "12-voice"
 
