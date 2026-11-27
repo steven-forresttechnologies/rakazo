@@ -48,7 +48,7 @@ jobs:
 
   publish:
     needs: result
-    if: needs.result.outputs.result != 'skipped'
+    if: vars.PLAYWRIGHT_PUBLIC_BASE_URL != '' && needs.result.outputs.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Everything here is per run, so it never queues; only the history job is serialized.
@@ -198,7 +198,7 @@ jobs:
     needs: [result, publish]
     # E2E skips only pull requests with no web UI change, which pr-screenshots.yml would skip anyway.
     if: >-
-      always() && needs.result.result == 'success' &&
+      always() && vars.PLAYWRIGHT_PUBLIC_BASE_URL != '' && needs.result.result == 'success' &&
       needs.result.outputs.result != 'skipped' &&
       github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-latest

@@ -1,5 +1,6 @@
 name: desktop-macos-screenshot
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths: &desktop-setup-paths

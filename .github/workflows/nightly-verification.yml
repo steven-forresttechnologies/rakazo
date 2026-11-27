@@ -17,7 +17,8 @@ jobs:
     name: Daily web screenshots
     uses: ./.github/workflows/playwright.yml
     with:
-      publish_report: true
+      publish_report: ${{ vars.PLAYWRIGHT_PUBLIC_BASE_URL != '' }}
+      upload_artifacts: ${{ vars.PLAYWRIGHT_PUBLIC_BASE_URL == '' }}
       nightly: true
     secrets:
       S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}

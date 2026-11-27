@@ -2,6 +2,11 @@ name: Playwright
 
 on:
   workflow_dispatch:
+    inputs:
+      upload_artifacts:
+        description: Retain the report and diagnostics as GitHub artifacts
+        type: boolean
+        default: true
   workflow_call:
     inputs:
       publish_report:
