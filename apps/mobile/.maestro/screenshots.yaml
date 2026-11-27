@@ -215,8 +215,7 @@ tags:
 - assertVisible: "Advanced"
 - tapOn: "Advanced"
 - assertVisible: "Model"
-# Label includes the resolved space model, e.g. "Space default (OpenAI: …)".
-- assertVisible: "Space default.*"
+- assertVisible: "Thinking"
 - takeScreenshot: "17-bot-settings"
 
 - openLink: "rakazo:///computer?botId=${RAKAZO_SCREENSHOT_BOT_ID}&name=Researcher"
