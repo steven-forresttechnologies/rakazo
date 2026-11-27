@@ -201,7 +201,7 @@ async function runFlow(flow: string, fixture: Awaited<ReturnType<typeof seedFixt
 /**
  * Maestro host-side helpers for what a flow cannot do on the device itself: expand the
  * Android shade without flaky status-bar swipes, share text in from another app, ring
- * the user from the Researcher, and connect the scripted voice provider.
+ * the user from the Researcher, stop its run, and connect the scripted voice provider.
  */
 function startDeviceControlServer(
   app: App,
@@ -218,6 +218,7 @@ function startDeviceControlServer(
         "-n com.rakazo.app/.MainActivity",
       ]),
     "/ring": () => ringFromResearcher(prisma, fixture),
+    "/stop-researcher": () => rpc(app, fixture.cookie, "threads/stop", { botId: fixture.botId }),
     "/connect-voice": () =>
       rpc(app, fixture.cookie, "voice/connect", {
         provider: "scripted",

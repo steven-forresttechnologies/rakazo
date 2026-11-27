@@ -45,7 +45,7 @@ name: Android live working status demonstration
 - hideKeyboard
 - tapOn: "Send"
 - extendedWaitUntil:
-    visible: "Stop"
+    visible: "still working.*"
     timeout: 30000
 - pressKey: HOME
 # Status-bar swipe is flaky on API 34 emulators; expand via host adb helper instead.
@@ -64,11 +64,12 @@ name: Android live working status demonstration
 - takeScreenshot: "30-live-working-notification"
 - tapOn: "Researcher is working"
 - extendedWaitUntil:
-    visible: "Stop"
+    visible: "still working.*"
     timeout: 10000
-- tapOn: "Stop"
+- evalScript: ${output.stopResearcher = http.get(RAKAZO_DEVICE_CONTROL_URL + '/stop-researcher')}
+- assertTrue: ${output.stopResearcher.ok}
 - extendedWaitUntil:
-    notVisible: "Stop"
+    notVisible: "still working.*"
     timeout: 30000
 - openLink: "rakazo:///general"
 - scrollUntilVisible:
