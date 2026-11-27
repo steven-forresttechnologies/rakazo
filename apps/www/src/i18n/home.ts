@@ -52,6 +52,7 @@ export type HomeCopy = {
     setupWithAgent: string;
     copiedForAgent: string;
     copyFailed: string;
+    usedBy: string;
   };
   selfHost: {
     heading: string;
@@ -127,6 +128,7 @@ export type HomeCopy = {
       sandboxes: string;
       integrationPlatforms: string;
       voiceProviders: string;
+      costCalculator: string;
       all: string;
       about: string;
       brand: string;
@@ -975,6 +977,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       setupWithAgent: "Skonfiguruj ze swoim agentem",
       copiedForAgent: "Skopiowano dla agenta",
       copyFailed: "Nie udało się skopiować. Spróbuj ponownie.",
+      usedBy: "Dołącz do ponad 13 000 profesjonalistów, w tym osób z:",
     },
     selfHost: {
       heading: "Na własnym serwerze",
@@ -1111,6 +1114,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         sandboxes: "Piaskownice",
         integrationPlatforms: "Platformy integracyjne",
         voiceProviders: "Dostawcy głosu",
+        costCalculator: "Kalkulator kosztów agenta AI",
         all: "Wszystkie",
         about: "O nas",
         brand: "Marka",
@@ -1159,6 +1163,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       setupWithAgent: "Set up with your agent",
       copiedForAgent: "Copied for your agent",
       copyFailed: "Copy failed. Try again.",
+      usedBy: "Join 13,000+ professionals, including people at:",
     },
     selfHost: {
       heading: "Self-hosted",
@@ -1288,6 +1293,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         sandboxes: "Sandboxes",
         integrationPlatforms: "Integration platforms",
         voiceProviders: "Voice providers",
+        costCalculator: "AI agent cost calculator",
         all: "All",
         about: "About",
         brand: "Brand",
@@ -1338,6 +1344,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       setupWithAgent: "Mit deinem Agenten einrichten",
       copiedForAgent: "Für deinen Agenten kopiert",
       copyFailed: "Kopieren fehlgeschlagen. Erneut versuchen.",
+      usedBy: "Schließ dich über 13.000 Profis an, darunter Leute von:",
     },
     selfHost: {
       heading: "Self-hosted",
@@ -1477,6 +1484,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         sandboxes: "Sandboxes",
         integrationPlatforms: "Integrationsplattformen",
         voiceProviders: "Sprachanbieter",
+        costCalculator: "KI-Agent-Kostenrechner",
         all: "Alle",
         about: "Über uns",
         brand: "Marke",
@@ -1526,6 +1534,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       setupWithAgent: "에이전트로 설정하기",
       copiedForAgent: "에이전트용으로 복사됨",
       copyFailed: "복사 실패. 다시 시도하세요.",
+      usedBy: "13,000명 이상의 전문가와 함께하세요. 다음 회사의 사람들도 사용합니다:",
     },
     selfHost: {
       heading: "셀프 호스트",
@@ -1648,6 +1657,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         sandboxes: "샌드박스",
         integrationPlatforms: "통합 플랫폼",
         voiceProviders: "음성 제공업체",
+        costCalculator: "AI 에이전트 비용 계산기",
         all: "전체",
         about: "소개",
         brand: "브랜드",
@@ -1697,6 +1707,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       setupWithAgent: "用你的智能体安装",
       copiedForAgent: "已为你的智能体复制",
       copyFailed: "复制失败。请重试。",
+      usedBy: "加入 13,000+ 位专业人士，其中包括来自以下公司的人：",
     },
     selfHost: {
       heading: "自托管",
@@ -1810,6 +1821,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         sandboxes: "沙箱",
         integrationPlatforms: "集成平台",
         voiceProviders: "语音服务商",
+        costCalculator: "AI 智能体费用计算器",
         all: "全部",
         about: "关于",
         brand: "品牌",
@@ -1860,6 +1872,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       setupWithAgent: "エージェントでセットアップ",
       copiedForAgent: "エージェント用にコピーしました",
       copyFailed: "コピーできませんでした。もう一度お試しください。",
+      usedBy: "13,000人以上のプロフェッショナルが利用中。利用者の所属先:",
     },
     selfHost: {
       heading: "セルフホスト",
@@ -1985,6 +1998,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         sandboxes: "サンドボックス",
         integrationPlatforms: "連携プラットフォーム",
         voiceProviders: "音声プロバイダー",
+        costCalculator: "AI エージェント費用計算ツール",
         all: "すべて",
         about: "概要",
         brand: "ブランド",
@@ -2035,6 +2049,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       setupWithAgent: "Configurar con tu agente",
       copiedForAgent: "Copiado para tu agente",
       copyFailed: "No se pudo copiar. Inténtalo de nuevo.",
+      usedBy: "Únete a más de 13.000 profesionales, incluidas personas de:",
     },
     selfHost: {
       heading: "Autoalojado",
@@ -2168,6 +2183,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         sandboxes: "Sandboxes",
         integrationPlatforms: "Plataformas de integración",
         voiceProviders: "Proveedores de voz",
+        costCalculator: "Calculadora de costos de agentes de IA",
         all: "Todas",
         about: "Acerca de",
         brand: "Marca",
@@ -2218,6 +2234,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       setupWithAgent: "Configurer avec votre agent",
       copiedForAgent: "Copié pour votre agent",
       copyFailed: "Échec de la copie. Réessayez.",
+      usedBy: "Rejoignez plus de 13 000 professionnels, dont des personnes de :",
     },
     selfHost: {
       heading: "Auto-hébergé",
@@ -2357,6 +2374,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         sandboxes: "Sandbox",
         integrationPlatforms: "Plateformes d'intégration",
         voiceProviders: "Fournisseurs de voix",
+        costCalculator: "Calculateur de coût d’agent IA",
         all: "Toutes",
         about: "À propos",
         brand: "Marque",
@@ -2407,6 +2425,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       setupWithAgent: "Configurar com seu agente",
       copiedForAgent: "Copiado para seu agente",
       copyFailed: "Falha ao copiar. Tente novamente.",
+      usedBy: "Junte-se a mais de 13.000 profissionais, incluindo pessoas da:",
     },
     selfHost: {
       heading: "Auto-hospedado",
@@ -2543,6 +2562,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         sandboxes: "Sandboxes",
         integrationPlatforms: "Plataformas de integração",
         voiceProviders: "Provedores de voz",
+        costCalculator: "Calculadora de custo de agentes de IA",
         all: "Todas",
         about: "Sobre",
         brand: "Marca",
@@ -2593,6 +2613,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       setupWithAgent: "Instellen met je agent",
       copiedForAgent: "Gekopieerd voor je agent",
       copyFailed: "Kopiëren mislukt. Probeer het opnieuw.",
+      usedBy: "Sluit je aan bij meer dan 13.000 professionals, onder wie mensen van:",
     },
     selfHost: {
       heading: "Zelf gehost",
@@ -2726,6 +2747,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         sandboxes: "Sandboxes",
         integrationPlatforms: "Integratieplatforms",
         voiceProviders: "Spraakproviders",
+        costCalculator: "Kostencalculator voor AI-agents",
         all: "Alle",
         about: "Over ons",
         brand: "Merk",
@@ -2776,6 +2798,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       setupWithAgent: "Настроить с помощью агента",
       copiedForAgent: "Скопировано для агента",
       copyFailed: "Не удалось скопировать. Попробуйте ещё раз.",
+      usedBy: "Присоединяйтесь к более чем 13 000 профессионалов, включая сотрудников:",
     },
     selfHost: {
       heading: "На своём сервере",
@@ -2909,6 +2932,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         sandboxes: "Песочницы",
         integrationPlatforms: "Платформы интеграций",
         voiceProviders: "Голосовые провайдеры",
+        costCalculator: "Калькулятор стоимости ИИ-агента",
         all: "Все",
         about: "О нас",
         brand: "Бренд",
@@ -2959,6 +2983,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       setupWithAgent: "Ajanınızla kurun",
       copiedForAgent: "Ajanınız için kopyalandı",
       copyFailed: "Kopyalanamadı. Tekrar deneyin.",
+      usedBy:
+        "Aralarında şu şirketlerden kişilerin de olduğu 13.000'den fazla profesyonele katılın:",
     },
     selfHost: {
       heading: "Kendi sunucunuzda",
@@ -3092,6 +3118,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         sandboxes: "Sandbox'lar",
         integrationPlatforms: "Entegrasyon platformları",
         voiceProviders: "Ses sağlayıcıları",
+        costCalculator: "Yapay zekâ ajanı maliyet hesaplayıcı",
         all: "Tümü",
         about: "Hakkımızda",
         brand: "Marka",
@@ -3141,6 +3168,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       setupWithAgent: "הגדרה עם הסוכן שלך",
       copiedForAgent: "הועתק עבור הסוכן שלך",
       copyFailed: "ההעתקה נכשלה. אפשר לנסות שוב.",
+      usedBy: "הצטרפו ליותר מ-13,000 אנשי מקצוע, כולל אנשים מ:",
     },
     selfHost: {
       heading: "באירוח עצמי",
@@ -3268,6 +3296,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         sandboxes: "ארגזי חול",
         integrationPlatforms: "פלטפורמות אינטגרציה",
         voiceProviders: "ספקי קול",
+        costCalculator: "מחשבון עלויות לסוכן AI",
         all: "הכול",
         about: "אודות",
         brand: "מותג",
@@ -3317,6 +3346,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       setupWithAgent: "अपने एजेंट से सेट अप करें",
       copiedForAgent: "आपके एजेंट के लिए कॉपी किया गया",
       copyFailed: "कॉपी नहीं हो सका। फिर से कोशिश करें।",
+      usedBy: "13,000+ पेशेवरों से जुड़ें, जिनमें इन कंपनियों के लोग भी हैं:",
     },
     selfHost: {
       heading: "सेल्फ़-होस्टेड",
@@ -3450,6 +3480,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         sandboxes: "सैंडबॉक्स",
         integrationPlatforms: "इंटीग्रेशन प्लेटफ़ॉर्म",
         voiceProviders: "वॉइस प्रदाता",
+        costCalculator: "AI एजेंट लागत कैलकुलेटर",
         all: "सभी",
         about: "हमारे बारे में",
         brand: "ब्रांड",
@@ -3499,6 +3530,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       setupWithAgent: "用你的代理程式設定",
       copiedForAgent: "已為你的代理程式複製",
       copyFailed: "複製失敗，請重試。",
+      usedBy: "加入 13,000+ 位專業人士，其中包括來自以下公司的人：",
     },
     selfHost: {
       heading: "自行託管",
@@ -3612,6 +3644,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         sandboxes: "沙箱",
         integrationPlatforms: "整合平台",
         voiceProviders: "語音服務商",
+        costCalculator: "AI 代理程式費用計算機",
         all: "全部",
         about: "關於我們",
         brand: "品牌",

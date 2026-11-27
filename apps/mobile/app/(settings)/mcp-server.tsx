@@ -30,7 +30,7 @@ import { useSideInsets } from "../../lib/layout/side-insets";
 import { announceToScreenReader } from "../../lib/native/announce";
 import { native, useThemedStyles } from "../../lib/native/native";
 import { useScreenHeader } from "../../lib/navigation/screen-header";
-import { formRead, refreshRpcQueries, rpcQuery, useSave } from "../../lib/query/query";
+import { formRead, rpcQuery, useSave } from "../../lib/query/query";
 import { useScreenQuery } from "../../lib/query/screen-query";
 
 type Draft = RemoteMcpServerEdit & { access: McpServerAccess };
@@ -84,6 +84,8 @@ function McpServerScreen({ id }: { id: string }) {
     ...edits,
   };
   const remote = server ? server.transport !== "stdio" : false;
+  // An older API leaves `manageable` out, and every server it lists is the member's own.
+  const manageable = server?.manageable !== false;
   const configChanged = Boolean(server && remote && remoteMcpServerChanged(server, draft));
   const accessChanged = !sameMcpServerAccess(draft.access, savedAccess);
 
@@ -92,19 +94,11 @@ function McpServerScreen({ id }: { id: string }) {
     save: async (next: Draft, send) => {
       if (!server) return;
       const config = configChanged ? remoteMcpServerUpdate(server, next) : null;
-      if (config) await send("mcp/servers/update", { id, config });
-      if (!accessChanged) return;
-      try {
-        await send("mcp/servers/agents", { id, ...next.access });
-      } catch (failure) {
-        if (config) {
-          // The settings above are saved: keep only the access edit, so a retry sends access
-          // alone, and show the saved settings before reporting the failure.
-          setEdits(({ access }) => (access ? { access } : {}));
-          await refreshRpcQueries("mcp/servers/list");
-        }
-        throw failure;
-      }
+      const access = accessChanged ? next.access : undefined;
+      // Settings and access go in one save, so neither is ever kept without the other.
+      if (config && access) await send("mcp/servers/save", { id, config, access });
+      else if (config) await send("mcp/servers/update", { id, config });
+      else if (access) await send("mcp/servers/agents", { id, ...access });
     },
     stale: [serversRead.queryKey, assignmentsRead.queryKey],
     onSaved: () => setEdits({}),
@@ -147,12 +141,14 @@ function McpServerScreen({ id }: { id: string }) {
 
   useScreenHeader({
     title: server?.name ?? "",
-    action: {
-      label: t`Save`,
-      disabled: !ready || !valid || !(configChanged || accessChanged),
-      busy,
-      onPress: () => save.run(draft),
-    },
+    action: manageable
+      ? {
+          label: t`Save`,
+          disabled: !ready || !valid || !(configChanged || accessChanged),
+          busy,
+          onPress: () => save.run(draft),
+        }
+      : null,
   });
 
   function edit(patch: Partial<Draft>) {
@@ -203,16 +199,22 @@ function McpServerScreen({ id }: { id: string }) {
               value={test.pending ? t`Checking…` : mcpServerStatusLabel(state)}
               detail={state === "not_working" ? (server.health.message ?? undefined) : undefined}
             />
-            <SettingsRow
-              key="test"
-              title={t`Test connection`}
-              tinted
-              // A test checks the saved settings, so it waits until edits to them are saved.
-              disabled={busy || configChanged || server.health.status === "installing"}
-              onPress={() => test.run()}
-            />
+            {manageable ? (
+              <SettingsRow
+                key="test"
+                title={t`Test connection`}
+                tinted
+                // A test checks the saved settings, so it waits until edits to them are saved.
+                disabled={busy || configChanged || server.health.status === "installing"}
+                onPress={() => test.run()}
+              />
+            ) : null}
           </SettingsGroup>
-          {remote ? (
+          {!manageable ? (
+            <SettingsGroup label={t`Server`}>
+              <SettingsRow key="address" title={server.endpoint ?? server.command ?? server.slug} />
+            </SettingsGroup>
+          ) : remote ? (
             <SettingsGroup label={t`Server`}>
               <SettingsInputRow
                 key="name"
@@ -251,7 +253,7 @@ function McpServerScreen({ id }: { id: string }) {
               <SettingsRow key="command" title={server.command ?? server.slug} />
             </SettingsGroup>
           )}
-          {remote ? (
+          {manageable && remote ? (
             <SettingsGroup>
               <SettingsRow
                 key="advanced"
@@ -263,7 +265,7 @@ function McpServerScreen({ id }: { id: string }) {
               />
             </SettingsGroup>
           ) : null}
-          {remote && advancedOpen ? (
+          {manageable && remote && advancedOpen ? (
             <>
               <SettingsGroup label={t`Transport`}>
                 <View key="transport" style={styles.segment}>
@@ -362,7 +364,8 @@ function McpServerScreen({ id }: { id: string }) {
               </SettingsGroup>
             </>
           ) : null}
-          {ready ? (
+          {/* An organization's server reaches every agent, so who can use it is not a choice. */}
+          {ready && manageable && !server.organization ? (
             <SettingsGroup label={t`Bots`}>
               <View key="scope" style={styles.segment}>
                 <NativeSegmentedControl
@@ -425,7 +428,7 @@ function McpServerScreen({ id }: { id: string }) {
           prominence="secondary"
         />
       ) : null}
-      {server ? (
+      {server && manageable ? (
         <NativeActionButton
           disabled={busy}
           fill={false}

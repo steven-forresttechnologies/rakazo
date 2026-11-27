@@ -14,6 +14,8 @@ import { McpServersOverlay } from "./McpServersOverlay";
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
+  createForBots: vi.fn(),
+  createForOrganization: vi.fn(),
   test: vi.fn(),
   update: vi.fn(),
   agents: vi.fn(),
@@ -29,6 +31,16 @@ vi.mock("../../components/integrations/space-availability", () => ({
   AvailabilityLabel: () => null,
   reachesOtherSpaces: () => false,
   useOwnSpaces: () => [],
+}));
+
+const organizations = vi.hoisted(() => ({
+  current: {
+    organizations: [] as Array<{ id: string; name: string; role: string; memberCount: number }>,
+    activeOrganizationId: null as string | null,
+  },
+}));
+vi.mock("../../lib/spaces/organizations", () => ({
+  useOrganizations: () => organizations.current,
 }));
 
 vi.mock("../../lib/query/rpc", () => ({
@@ -156,6 +168,27 @@ vi.mock("@rakazo/ui-web", async () => {
     ],
     ["Textarea", () => null],
     [
+      "OptionSelect",
+      ({
+        options,
+        onValueChange,
+      }: {
+        options: Array<{ value: string; label: string }>;
+        onValueChange: (value: string) => void;
+      }) =>
+        createElement(
+          "div",
+          null,
+          options.map((option) =>
+            createElement(
+              "button",
+              { key: option.value, onClick: () => onValueChange(option.value) },
+              option.label,
+            ),
+          ),
+        ),
+    ],
+    [
       "Checkbox",
       ({
         id,
@@ -183,6 +216,7 @@ beforeEach(() => {
   access.all.mockReset().mockResolvedValue([]);
   mocks.agents.mockReset();
   access.bots.mockReset().mockResolvedValue([]);
+  organizations.current = { organizations: [], activeOrganizationId: null };
 });
 
 function overlay(editServerId?: string, stdioEnabled = true) {
@@ -817,6 +851,123 @@ it("keeps Save off while a stored header is renamed without a new value", async 
     expect(saveButton()?.disabled).toBe(true);
     await act(async () => type("Header value", "new"));
     expect(saveButton()?.disabled).toBe(false);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("adds a server for chosen bots in one call that an older API refuses", async () => {
+  const created = { ...server("docs"), allBots: false } as McpServer;
+  mocks.list.mockReset().mockResolvedValue([]);
+  mocks.list.mockResolvedValueOnce([]).mockResolvedValue([created]);
+  mocks.create.mockReset();
+  mocks.createForBots.mockReset().mockResolvedValue(created);
+  mocks.agents.mockReset();
+  mocks.test.mockReset().mockResolvedValue(created);
+  access.bots.mockResolvedValue([
+    { id: "bot_1", name: "Ada", color: "#F97316" },
+    { id: "bot_2", name: "Grace", color: "#6366F1" },
+  ]);
+  access.all.mockResolvedValue([]);
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  const type = (selector: string, value: string) => {
+    const input = host.querySelector<HTMLInputElement>(selector)!;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  const option = (name: string) =>
+    Array.from(host.querySelectorAll<HTMLButtonElement>("button[aria-checked]")).find(
+      (item) => item.textContent === name,
+    );
+  try {
+    await act(async () => root.render(overlay()));
+    await vi.waitFor(() => expect(host.querySelector("#mcp-name")).not.toBeNull());
+    await vi.waitFor(() => expect(option("Ada")?.disabled).toBe(false));
+    await act(async () => {
+      type("#mcp-name", "docs");
+      type("#mcp-endpoint", "https://mcp.example.test/mcp");
+    });
+    await act(async () => option("Ada")!.click());
+    const addServer = Array.from(host.querySelectorAll("button")).find(
+      (item) => item.textContent === "Add server",
+    );
+    await act(async () => addServer?.click());
+    await vi.waitFor(() =>
+      expect(mocks.createForBots).toHaveBeenCalledWith(
+        expect.objectContaining({ botIds: ["bot_2"] }),
+      ),
+    );
+    // The form closes once the save has finished, with no error.
+    await vi.waitFor(() => expect(host.querySelector("#mcp-name")).toBeNull());
+    expect(host.textContent).not.toContain("Could not add MCP server");
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.agents).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("shows an organization server the member cannot manage without its actions", async () => {
+  mocks.list
+    .mockReset()
+    .mockResolvedValue([
+      { ...oauthServer("Shared"), organization: true, manageable: false, oauthStatus: "reconnect" },
+    ]);
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(overlay("Shared")));
+    await vi.waitFor(() => expect(host.textContent).toContain("Organization"));
+    expect(host.textContent).toContain("https://provider.example.com/mcp");
+    expect(host.querySelector("#mcp-name")).toBeNull();
+    expect(host.querySelector('button[aria-label="Actions for Shared"]')).toBeNull();
+    expect(host.textContent).not.toContain("Reconnect OAuth");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("lets an organization admin add a server for the whole organization", async () => {
+  organizations.current = {
+    organizations: [{ id: "org_1", name: "Acme", role: "admin", memberCount: 3 }],
+    activeOrganizationId: "org_1",
+  };
+  const created = { ...server("docs"), organization: true } as McpServer;
+  mocks.list.mockReset().mockResolvedValueOnce([]).mockResolvedValue([created]);
+  mocks.create.mockReset();
+  mocks.createForOrganization.mockReset().mockResolvedValue(created);
+  mocks.test.mockReset().mockResolvedValue(created);
+  access.bots.mockResolvedValue([
+    { id: "bot_1", name: "Ada", color: "#F97316" },
+    { id: "bot_2", name: "Grace", color: "#6366F1" },
+  ]);
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  const type = (selector: string, value: string) => {
+    const input = host.querySelector<HTMLInputElement>(selector)!;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  const button = (label: string) =>
+    Array.from(host.querySelectorAll("button")).find((item) => item.textContent === label);
+  try {
+    await act(async () => root.render(overlay()));
+    await vi.waitFor(() => expect(button("Ada")).toBeDefined());
+    await act(async () => {
+      type("#mcp-name", "docs");
+      type("#mcp-endpoint", "https://mcp.example.test/mcp");
+    });
+    await act(async () => button("Acme")?.click());
+    // Every agent can use an organization server, so there is no agent choice.
+    expect(button("Ada")).toBeUndefined();
+    await act(async () => button("Add server")?.click());
+    await vi.waitFor(() =>
+      expect(mocks.createForOrganization).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "docs", endpoint: "https://mcp.example.test/mcp" }),
+      ),
+    );
+    expect(mocks.create).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());
   }

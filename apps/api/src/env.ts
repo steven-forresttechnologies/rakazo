@@ -24,7 +24,7 @@ import {
   workspaceSaveLimits,
 } from "@rakazo/adapters";
 import type { OidcConfig, SocialAuthConfig } from "@rakazo/auth";
-import { socialAuthFromFields } from "@rakazo/auth";
+import { oidcAuthorizationParams, socialAuthFromFields } from "@rakazo/auth";
 import type { LabFeature, MinimumClientBuilds, NavLink } from "@rakazo/contracts";
 import { isPrivateNetworkHost, parseMinimumClientBuilds, parseNavLinks } from "@rakazo/contracts";
 import { parseCrispWebsiteId } from "@rakazo/contracts/content-security-policy";
@@ -47,6 +47,8 @@ import {
   resolveSupervisorToken,
 } from "@rakazo/core/node/secrets-guard";
 import { getLogger, monitoringPseudonymSecret } from "@rakazo/logging";
+import type { CreditCode } from "./billing/credit-codes.js";
+import { parseCreditCodes } from "./billing/credit-codes.js";
 import type { DeploymentVoice } from "./voice/deployment-config.js";
 import { deploymentVoiceFromEnv } from "./voice/deployment-config.js";
 
@@ -101,6 +103,8 @@ export interface AppEnv extends MessagingEnvironmentValues {
   /** Verified accounts that review plugin submissions, add stdio MCP servers, and grant access
    * (RAKAZO_ADMIN_EMAILS), lowercased. */
   adminEmails: string[];
+  /** Codes an account owner redeems once for free credits (CREDIT_CODES), keyed by code. */
+  creditCodes: Map<string, CreditCode>;
   phoneCallsEnabled: boolean;
   phoneCallRingSeconds: number;
   phoneCallCooldownMinutes: number;
@@ -254,6 +258,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
             .filter(Boolean),
           allowSignupBypass: source.OIDC_ALLOW_SIGNUP_BYPASS === "true",
           emailVerifiedClaim: optional(source.OIDC_EMAIL_VERIFIED_CLAIM),
+          authorizationParams: oidcAuthorizationParams(source.OIDC_AUTHORIZATION_PARAMS),
         }
       : undefined;
   const social = socialAuthFromFields({
@@ -310,6 +315,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     computerSettingsEnabled: source.COMPUTER_SETTINGS_ENABLED === "true",
     navLinks: parseNavLinks(source.RAKAZO_NAV_LINKS),
     adminEmails: list(source.RAKAZO_ADMIN_EMAILS).map((email) => email.toLowerCase()),
+    creditCodes: parseCreditCodes(source.CREDIT_CODES),
     ...phoneCallSettings(source),
     maxUploadSizeBytes: uploadSizeFromEnv(source),
     workspaceSaveLimits: workspaceSaveLimits(source),

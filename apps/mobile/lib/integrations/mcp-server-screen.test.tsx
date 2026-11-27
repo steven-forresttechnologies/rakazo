@@ -410,28 +410,21 @@ it("does not show the stored OAuth client ID", async () => {
   expect(container.innerHTML).not.toContain("stored-client");
 });
 
-it("reads the server again when its settings saved but bot access did not", async () => {
+it("saves new settings and bot access in one write", async () => {
   await render();
-  const read = vi.mocked(rpc).getMockImplementation();
-  vi.mocked(rpc).mockImplementation(((path: string, ...rest: unknown[]) =>
-    path === "mcp/servers/agents"
-      ? Promise.reject(new Error("Could not change bots"))
-      : read?.(path as never, ...(rest as []))) as never);
   await type("Name", "Issue tracker");
   await tap("Chosen bots");
   await tap("Scout");
-  const listReads = () => vi.mocked(rpc).mock.calls.filter(([path]) => path === "mcp/servers/list");
-  const before = listReads().length;
-  await save();
-  expect(updates()).toHaveLength(1);
-  expect(listReads().length).toBeGreaterThan(before);
-
-  // A retry sends only the access that is still unsaved.
-  vi.mocked(rpc).mockImplementation(read as never);
-  const sent = writes().length;
   expect(await save()).toBe(true);
-  expect(writes().slice(sent)).toEqual([
-    ["mcp/servers/agents", { id: "srv-1", allBots: false, botIds: ["bot-2"] }],
+  expect(writes()).toEqual([
+    [
+      "mcp/servers/save",
+      expect.objectContaining({
+        id: "srv-1",
+        config: expect.objectContaining({ name: "Issue tracker" }),
+        access: { allBots: false, botIds: ["bot-2"] },
+      }),
+    ],
   ]);
 });
 
@@ -468,4 +461,23 @@ it("waits for edited settings to be saved before testing the connection", async 
   await tap("Test connection");
   await act(flush);
   expect(writes()).toEqual([]);
+});
+
+it("shows a server the member cannot manage without a way to change it", async () => {
+  server = { ...remote, organization: true, manageable: false };
+  await render();
+  expect(container.textContent).toContain("Status: Connected");
+  expect(container.textContent).toContain("https://tracker.example.test/mcp");
+  expect(container.querySelectorAll("input")).toHaveLength(0);
+  for (const label of ["Test connection", "Advanced", "All bots", "Delete"]) {
+    expect(container.textContent).not.toContain(label);
+  }
+  expect(navigation.options.headerRight).toBeUndefined();
+});
+
+it("offers no bot choice for an organization's server its admin manages", async () => {
+  server = { ...remote, organization: true, manageable: true, allBots: false };
+  await render();
+  expect(container.textContent).toContain("Advanced");
+  expect(container.textContent).not.toContain("All bots");
 });
