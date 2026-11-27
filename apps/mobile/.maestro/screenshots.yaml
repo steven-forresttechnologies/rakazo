@@ -121,7 +121,7 @@ tags:
 
 - openLink: "rakazo:///integrations"
 - extendedWaitUntil:
-    visible: "Search apps"
+    visible: "Docs search"
     timeout: 10000
 - takeScreenshot: "13-integrations"
 - tapOn: "Add custom"
