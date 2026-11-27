@@ -14,11 +14,12 @@ test("the chat header floats over the transcript", async ({ page }, testInfo) =>
   await rpc(page, "onboarding/dismissFocus", { botId: activeBotId(page) });
 
   const composer = page.getByRole("combobox", { name: /Message/ });
+  const send = page.getByRole("button", { name: "Send", exact: true });
   const transcript = page.getByTestId("transcript");
   for (let item = 1; item <= 8; item++) {
     const text = `Question ${item}: what is the status of launch item ${item}? The draft is reviewed and the checklist is complete.`;
     await composer.fill(text);
-    await composer.press("Enter");
+    await send.click();
     await expect(transcript.getByText(text, { exact: true })).toBeVisible();
   }
 
