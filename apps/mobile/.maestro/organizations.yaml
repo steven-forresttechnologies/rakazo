@@ -95,9 +95,9 @@ tags:
 
 # Deleting Work leaves the fixture with its one organization again.
 - openLink: "rakazo:///account"
-- extendedWaitUntil:
-    visible: "Organization"
-    timeout: 10000
+- scrollUntilVisible:
+    element: "Organization"
+    direction: DOWN
 - extendedWaitUntil:
     visible: "Work"
     timeout: 10000
